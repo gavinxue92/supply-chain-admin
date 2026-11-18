@@ -21,9 +21,13 @@ const form = reactive<CategoryRequest>({
   sortOrder: 0,
 })
 
+function isRootCategory(category: CategoryVO): boolean {
+  return category.parentId === null || category.parentId === undefined
+}
+
 const parentOptions = computed(() =>
   categories.value.filter(
-    (category) => category.parentId === null && category.id !== editingCategoryId.value,
+    (category) => isRootCategory(category) && category.id !== editingCategoryId.value,
   ),
 )
 
@@ -41,7 +45,7 @@ const dialogTitle = computed(() => {
 const visibleCategories = computed(() => {
   const visible: CategoryVO[] = []
   for (const category of categories.value) {
-    if (category.parentId !== null) continue
+    if (!isRootCategory(category)) continue
     visible.push(category)
     if (expandedCategoryIds.value.has(category.id)) {
       visible.push(...categories.value.filter((child) => child.parentId === category.id))
@@ -117,7 +121,7 @@ function openCreateSubcategory(category: CategoryVO) {
 function openEditDialog(category: CategoryVO) {
   editingCategoryId.value = category.id
   form.name = category.name
-  form.parentId = category.parentId
+  form.parentId = category.parentId ?? null
   form.sortOrder = category.sortOrder
   dialogError.value = ''
   operationError.value = ''
@@ -144,7 +148,7 @@ function validateForm(): string | null {
 
   if (form.parentId !== null) {
     const parent = categories.value.find((category) => category.id === form.parentId)
-    if (!parent || parent.parentId !== null) return '只能选择一级分类作为上级分类'
+    if (!parent || !isRootCategory(parent)) return '只能选择一级分类作为上级分类'
     if (editingCategoryHasChildren.value) return '含有子分类的一级分类不能调整上级分类'
   }
 
@@ -201,7 +205,7 @@ async function toggleCategoryStatus(category: CategoryVO) {
   const active = !category.active
   const action = active ? '启用' : '停用'
   const message =
-    !active && category.parentId === null
+    !active && isRootCategory(category)
       ? `停用一级分类“${category.name}”将隐藏整棵分类树，是否继续？`
       : `确认${action}分类“${category.name}”吗？`
 
@@ -290,7 +294,7 @@ onMounted(loadCategories)
       <el-table-column label="分类名称" min-width="180">
         <template #default="{ row }">
           <el-button
-            v-if="row.parentId === null && hasChildren(row)"
+            v-if="isRootCategory(row) && hasChildren(row)"
             link
             type="primary"
             :aria-expanded="isExpanded(row)"
@@ -299,14 +303,14 @@ onMounted(loadCategories)
             <span class="category-tree-indicator">{{ isExpanded(row) ? '−' : '+' }}</span>
             {{ row.name }}
           </el-button>
-          <span v-else :class="{ 'category-child-name': row.parentId !== null }">
+          <span v-else :class="{ 'category-child-name': !isRootCategory(row) }">
             {{ row.name }}
           </span>
         </template>
       </el-table-column>
       <el-table-column label="分类等级" width="120">
         <template #default="{ row }">
-          {{ row.parentId === null ? '一级' : '二级' }}
+          {{ isRootCategory(row) ? '一级' : '二级' }}
         </template>
       </el-table-column>
       <el-table-column label="状态" width="120">
@@ -320,7 +324,7 @@ onMounted(loadCategories)
       <el-table-column label="操作" width="240" fixed="right">
         <template #default="{ row }">
           <el-button
-            v-if="row.parentId === null"
+            v-if="isRootCategory(row)"
             link
             type="primary"
             @click="openCreateSubcategory(row)"

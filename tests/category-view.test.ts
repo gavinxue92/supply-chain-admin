@@ -76,6 +76,22 @@ describe('分类管理页面', () => {
     expect(wrapper.findAll('.el-table__body tr')).toHaveLength(1)
   })
 
+  it('后端省略一级分类 parentId 时仍展示为一级分类', async () => {
+    vi.mocked(categoryApi.listCategories).mockResolvedValue([
+      { id: 8, name: '食材', active: true, sortOrder: 0 },
+    ])
+    const wrapper = mount(CategoryView, {
+      global: { plugins: [ElementPlus] },
+    })
+    wrappers.push(wrapper)
+    await flushPromises()
+
+    const rows = wrapper.findAll('.el-table__body tr')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].text()).toContain('食材')
+    expect(rows[0].text()).toContain('一级')
+  })
+
   it('必填名称未填写时保留新建表单并显示校验错误', async () => {
     vi.mocked(categoryApi.listCategories).mockResolvedValue([])
     const wrapper = mount(CategoryView, {

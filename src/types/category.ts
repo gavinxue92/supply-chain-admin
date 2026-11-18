@@ -1,6 +1,6 @@
 export interface CategoryVO {
   id: number
-  parentId: number | null
+  parentId?: number | null
   name: string
   active: boolean
   sortOrder: number
