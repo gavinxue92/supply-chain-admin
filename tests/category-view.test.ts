@@ -36,7 +36,7 @@ describe('分类管理页面', () => {
     vi.restoreAllMocks()
   })
 
-  it('展示完整分类列表及父级、启用状态和排序', async () => {
+  it('按分类等级展示并通过一级名称展开、折叠二级分类', async () => {
     vi.mocked(categoryApi.listCategories).mockResolvedValue([
       { id: 1, parentId: null, name: '冷冻食品', active: true, sortOrder: 2 },
       { id: 2, parentId: 1, name: '水产', active: false, sortOrder: 1 },
@@ -48,16 +48,32 @@ describe('分类管理页面', () => {
     wrappers.push(wrapper)
     await flushPromises()
 
-    const rows = wrapper.findAll('.el-table__body tr')
-    expect(rows).toHaveLength(2)
+    const headers = wrapper.findAll('.el-table__header th').map((header) => header.text())
+    expect(headers).toContain('分类等级')
+    expect(headers).not.toContain('上级分类')
+
+    let rows = wrapper.findAll('.el-table__body tr')
+    expect(rows).toHaveLength(1)
     expect(rows[0].text()).toContain('冷冻食品')
-    expect(rows[0].text()).toContain('一级分类')
+    expect(rows[0].text()).toContain('一级')
     expect(rows[0].text()).toContain('已启用')
     expect(rows[0].text()).toContain('2')
+    expect(wrapper.text()).not.toContain('水产')
+
+    const rootNameButton = wrapper.findAll('button').find((button) => button.text().includes('冷冻食品'))
+    await rootNameButton?.trigger('click')
+    await flushPromises()
+
+    rows = wrapper.findAll('.el-table__body tr')
+    expect(rows).toHaveLength(2)
     expect(rows[1].text()).toContain('水产')
-    expect(rows[1].text()).toContain('冷冻食品')
+    expect(rows[1].text()).toContain('二级')
     expect(rows[1].text()).toContain('已停用')
     expect(rows[1].text()).toContain('1')
+
+    await rootNameButton?.trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('.el-table__body tr')).toHaveLength(1)
   })
 
   it('必填名称未填写时保留新建表单并显示校验错误', async () => {
@@ -77,10 +93,10 @@ describe('分类管理页面', () => {
 
     expect(categoryApi.createCategory).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('分类名称不能为空')
-    expect(wrapper.text()).toContain('新增分类')
+    expect(wrapper.text()).toContain('新增一级分类')
   })
 
-  it('创建一级分类并刷新完整列表', async () => {
+  it('新增一级分类只提交空 parentId 并刷新完整列表', async () => {
     vi.mocked(categoryApi.listCategories)
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
@@ -99,8 +115,12 @@ describe('分类管理页面', () => {
     wrappers.push(wrapper)
     await flushPromises()
 
-    await wrapper.get('button').trigger('click')
+    const createRootButton = wrapper.findAll('button')
+      .find((button) => button.text() === '新增一级分类')
+    expect(createRootButton).toBeDefined()
+    await createRootButton?.trigger('click')
     await flushPromises()
+    expect(wrapper.text()).toContain('新增一级分类')
     const nameInput = wrapper.find('input[placeholder="请输入分类名称"]')
     expect(nameInput.exists()).toBe(true)
     await nameInput.setValue('饮料')
@@ -252,11 +272,19 @@ describe('分类管理页面', () => {
     expect(wrapper.text()).toContain('冻品')
   })
 
-  it('创建二级分类时只允许选择一级分类作为父级', async () => {
-    vi.mocked(categoryApi.listCategories).mockResolvedValue([
-      { id: 1, parentId: null, name: '冷冻食品', active: true, sortOrder: 1 },
-      { id: 2, parentId: 1, name: '水产', active: true, sortOrder: 1 },
-    ])
+  it('从一级分类操作中直接创建其二级分类', async () => {
+    vi.mocked(categoryApi.listCategories)
+      .mockResolvedValueOnce([
+        { id: 1, parentId: null, name: '冷冻食品', active: true, sortOrder: 1 },
+        { id: 2, parentId: 1, name: '水产', active: true, sortOrder: 1 },
+        { id: 4, parentId: null, name: '饮料', active: true, sortOrder: 2 },
+      ])
+      .mockResolvedValueOnce([
+        { id: 1, parentId: null, name: '冷冻食品', active: true, sortOrder: 1 },
+        { id: 2, parentId: 1, name: '水产', active: true, sortOrder: 1 },
+        { id: 3, parentId: 1, name: '冻鱼', active: true, sortOrder: 0 },
+        { id: 4, parentId: null, name: '饮料', active: true, sortOrder: 2 },
+      ])
     vi.mocked(categoryApi.createCategory).mockResolvedValue({
       id: 3,
       parentId: 1,
@@ -270,15 +298,16 @@ describe('分类管理页面', () => {
     wrappers.push(wrapper)
     await flushPromises()
 
-    await wrapper.get('button').trigger('click')
+    const rootRow = wrapper.findAll('.el-table__body tr')
+      .find((row) => row.text().includes('冷冻食品'))
+    const addChildButton = rootRow?.findAll('button')
+      .find((button) => button.text() === '新增二级分类')
+    expect(addChildButton).toBeDefined()
+    await addChildButton?.trigger('click')
     await flushPromises()
-    await wrapper.find('.el-select__wrapper').trigger('click')
-    await flushPromises()
-    const parentOptions = Array.from(
-      document.body.querySelectorAll<HTMLDivElement>('.el-select-dropdown__item'),
-    )
-    expect(parentOptions.map((option) => option.textContent?.trim())).toEqual(['冷冻食品'])
-    parentOptions[0].click()
+    expect(wrapper.text()).toContain('新增二级分类')
+    expect(wrapper.text()).toContain('冷冻食品')
+    expect(wrapper.find('.el-select').exists()).toBe(false)
     await wrapper.find('input[placeholder="请输入分类名称"]').setValue('冻鱼')
     const saveButton = wrapper.findAll('button').find((button) => button.text().includes('保存'))
     await saveButton?.trigger('click')
@@ -289,6 +318,9 @@ describe('分类管理页面', () => {
       parentId: 1,
       sortOrder: 0,
     })
+    const rows = wrapper.findAll('.el-table__body tr')
+    expect(rows).toHaveLength(4)
+    expect(rows[2].text()).toContain('冻鱼')
   })
 
   it('同一父级下名称重复时保留表单并阻止提交', async () => {
@@ -310,7 +342,7 @@ describe('分类管理页面', () => {
 
     expect(categoryApi.createCategory).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('同一父分类下不能有重名分类')
-    expect(wrapper.text()).toContain('新增分类')
+    expect(wrapper.text()).toContain('新增一级分类')
     expect(
       wrapper.find<HTMLInputElement>('input[placeholder="请输入分类名称"]').element.value,
     ).toBe('冷冻食品')

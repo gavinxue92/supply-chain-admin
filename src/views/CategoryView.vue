@@ -13,6 +13,7 @@ const successMessage = ref('')
 const dialogVisible = ref(false)
 const dialogError = ref('')
 const editingCategoryId = ref<number | null>(null)
+const expandedCategoryIds = ref(new Set<number>())
 
 const form = reactive<CategoryRequest>({
   name: '',
@@ -31,6 +32,23 @@ const editingCategoryHasChildren = computed(
     editingCategoryId.value !== null &&
     categories.value.some((category) => category.parentId === editingCategoryId.value),
 )
+
+const dialogTitle = computed(() => {
+  if (editingCategoryId.value !== null) return '编辑分类'
+  return form.parentId === null ? '新增一级分类' : '新增二级分类'
+})
+
+const visibleCategories = computed(() => {
+  const visible: CategoryVO[] = []
+  for (const category of categories.value) {
+    if (category.parentId !== null) continue
+    visible.push(category)
+    if (expandedCategoryIds.value.has(category.id)) {
+      visible.push(...categories.value.filter((child) => child.parentId === category.id))
+    }
+  }
+  return visible
+})
 
 function errorMessage(error: unknown, fallback: string): string {
   if (axios.isAxiosError<ApiResult<unknown>>(error)) {
@@ -54,20 +72,46 @@ async function loadCategories() {
   }
 }
 
-function parentName(category: CategoryVO): string {
-  if (category.parentId === null) return '一级分类'
-  return categories.value.find((item) => item.id === category.parentId)?.name ?? '未知分类'
+function hasChildren(category: CategoryVO): boolean {
+  return categories.value.some((item) => item.parentId === category.id)
 }
 
-function openCreateDialog() {
+function parentCategoryName(): string {
+  return categories.value.find((category) => category.id === form.parentId)?.name ?? '未知分类'
+}
+
+function isExpanded(category: CategoryVO): boolean {
+  return expandedCategoryIds.value.has(category.id)
+}
+
+function toggleExpanded(category: CategoryVO) {
+  const nextExpandedIds = new Set(expandedCategoryIds.value)
+  if (nextExpandedIds.has(category.id)) {
+    nextExpandedIds.delete(category.id)
+  } else {
+    nextExpandedIds.add(category.id)
+  }
+  expandedCategoryIds.value = nextExpandedIds
+}
+
+function expandCategory(categoryId: number | null) {
+  if (categoryId === null || expandedCategoryIds.value.has(categoryId)) return
+  expandedCategoryIds.value = new Set([...expandedCategoryIds.value, categoryId])
+}
+
+function openCreateDialog(parentId: number | null = null) {
   editingCategoryId.value = null
   form.name = ''
-  form.parentId = null
+  form.parentId = parentId
   form.sortOrder = 0
   dialogError.value = ''
   operationError.value = ''
   successMessage.value = ''
   dialogVisible.value = true
+}
+
+function openCreateSubcategory(category: CategoryVO) {
+  openCreateDialog(category.id)
 }
 
 function openEditDialog(category: CategoryVO) {
@@ -124,9 +168,11 @@ async function saveCategory() {
   try {
     if (editingCategoryId.value === null) {
       await categoryApi.createCategory(payload)
+      expandCategory(payload.parentId)
       successMessage.value = '分类创建成功'
     } else {
       await categoryApi.updateCategory(editingCategoryId.value, payload)
+      expandCategory(payload.parentId)
       successMessage.value = '分类保存成功'
     }
     dialogVisible.value = false
@@ -206,7 +252,7 @@ onMounted(loadCategories)
     <template #header>
       <div class="category-header">
         <span>分类管理</span>
-        <el-button type="primary" @click="openCreateDialog">新增分类</el-button>
+        <el-button type="primary" @click="openCreateDialog()">新增一级分类</el-button>
       </div>
     </template>
 
@@ -237,13 +283,31 @@ onMounted(loadCategories)
       class="category-alert"
     />
 
-    <el-table v-loading="loading" :data="categories" row-key="id">
+    <el-table v-loading="loading" :data="visibleCategories" row-key="id">
       <template #empty>
         <el-empty description="暂无分类" />
       </template>
-      <el-table-column prop="name" label="分类名称" min-width="180" />
-      <el-table-column label="上级分类" min-width="150">
-        <template #default="{ row }">{{ parentName(row) }}</template>
+      <el-table-column label="分类名称" min-width="180">
+        <template #default="{ row }">
+          <el-button
+            v-if="row.parentId === null && hasChildren(row)"
+            link
+            type="primary"
+            :aria-expanded="isExpanded(row)"
+            @click="toggleExpanded(row)"
+          >
+            <span class="category-tree-indicator">{{ isExpanded(row) ? '−' : '+' }}</span>
+            {{ row.name }}
+          </el-button>
+          <span v-else :class="{ 'category-child-name': row.parentId !== null }">
+            {{ row.name }}
+          </span>
+        </template>
+      </el-table-column>
+      <el-table-column label="分类等级" width="120">
+        <template #default="{ row }">
+          {{ row.parentId === null ? '一级' : '二级' }}
+        </template>
       </el-table-column>
       <el-table-column label="状态" width="120">
         <template #default="{ row }">
@@ -255,6 +319,14 @@ onMounted(loadCategories)
       <el-table-column prop="sortOrder" label="排序" width="100" />
       <el-table-column label="操作" width="240" fixed="right">
         <template #default="{ row }">
+          <el-button
+            v-if="row.parentId === null"
+            link
+            type="primary"
+            @click="openCreateSubcategory(row)"
+          >
+            新增二级分类
+          </el-button>
           <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
           <el-button link type="primary" @click="toggleCategoryStatus(row)">
             {{ row.active ? '停用' : '启用' }}
@@ -267,7 +339,7 @@ onMounted(loadCategories)
 
   <el-dialog
     v-model="dialogVisible"
-    :title="editingCategoryId === null ? '新增分类' : '编辑分类'"
+    :title="dialogTitle"
     width="520px"
     destroy-on-close
   >
@@ -280,7 +352,10 @@ onMounted(loadCategories)
           show-word-limit
         />
       </el-form-item>
-      <el-form-item label="上级分类">
+      <el-form-item v-if="editingCategoryId === null" label="分类等级">
+        {{ form.parentId === null ? '一级分类' : `二级分类（${parentCategoryName()}）` }}
+      </el-form-item>
+      <el-form-item v-else label="上级分类">
         <el-select
           v-model="form.parentId"
           placeholder="不选择则创建一级分类"
@@ -333,5 +408,16 @@ onMounted(loadCategories)
   color: #909399;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.category-tree-indicator {
+  display: inline-block;
+  width: 16px;
+  margin-right: 4px;
+  font-weight: 700;
+}
+
+.category-child-name {
+  padding-left: 24px;
 }
 </style>
