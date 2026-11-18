@@ -14,6 +14,10 @@ async function submit() {
     ElMessage.warning('新密码长度不能少于 12 个字符')
     return
   }
+  if (newPassword.value.length > 200) {
+    ElMessage.warning('新密码长度不能超过 200 个字符')
+    return
+  }
   loading.value = true
   try {
     await auth.changePassword(newPassword.value)
@@ -32,7 +36,7 @@ async function submit() {
     <el-card class="login-card" header="首次登录改密">
       <el-form label-position="top" @submit.prevent="submit">
         <el-form-item label="新密码">
-          <el-input v-model="newPassword" type="password" autocomplete="new-password" show-password />
+          <el-input v-model="newPassword" type="password" autocomplete="new-password" show-password :maxlength="200" />
         </el-form-item>
         <el-button type="primary" :loading="loading" style="width: 100%" @click="submit">确认修改</el-button>
       </el-form>

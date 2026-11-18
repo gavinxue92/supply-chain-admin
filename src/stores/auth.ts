@@ -37,6 +37,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function changePassword(newPassword: string) {
+    if (newPassword.length < 12 || newPassword.length > 200) {
+      throw new Error('新密码长度必须为 12 至 200 个字符')
+    }
     await authApi.changePassword({ newPassword })
     clearSession()
   }

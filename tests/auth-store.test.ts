@@ -50,6 +50,21 @@ describe('认证 Store', () => {
     expect(store.mustChangePassword).toBe(false)
   })
 
+  it('拒绝超过 200 个字符的新密码且不发起改密请求', async () => {
+    vi.mocked(login).mockResolvedValue({
+      username: 'editor',
+      role: 'EDITOR',
+      mustChangePassword: true,
+    })
+    vi.mocked(getCsrfToken).mockResolvedValue('csrf-token')
+
+    const store = useAuthStore()
+    await store.login('editor', 'temporary-password')
+
+    await expect(store.changePassword('a'.repeat(201))).rejects.toThrow('新密码长度必须为 12 至 200 个字符')
+    expect(changePassword).not.toHaveBeenCalled()
+  })
+
   it('退出后清除用户和角色', async () => {
     vi.mocked(login).mockResolvedValue({
       username: 'admin',
