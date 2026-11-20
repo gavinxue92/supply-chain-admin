@@ -42,6 +42,40 @@ const dialogTitle = computed(() => {
   return form.parentId === null ? '新增一级分类' : '新增二级分类'
 })
 
+const dialogSubtitle = computed(() => {
+  if (editingCategoryId.value !== null) return '维护分类名称、排序与上级分类'
+  return form.parentId === null
+    ? '创建商品大类，作为二级分类的上级目录'
+    : `为「${parentCategoryName()}」创建二级分类，产品需挂在二级分类下`
+})
+
+const levelLabel = computed(() =>
+  form.parentId === null ? '一级分类' : `二级分类（${parentCategoryName()}）`,
+)
+
+const hierarchySteps = computed(() => [
+  {
+    label: '一级分类',
+    state: form.parentId === null ? 'current' : 'done',
+    hint: form.parentId === null ? '当前' : '已完成',
+  },
+  {
+    label: '二级分类',
+    state: form.parentId !== null ? 'current' : 'next',
+    hint: form.parentId !== null ? '当前' : '下一步',
+  },
+  {
+    label: '产品',
+    state: 'later',
+    hint: '未选',
+  },
+])
+
+function stepSortOrder(delta: number) {
+  const next = Number(form.sortOrder) + delta
+  form.sortOrder = Number.isFinite(next) ? next : 0
+}
+
 const visibleCategories = computed(() => {
   const visible: CategoryVO[] = []
   for (const category of categories.value) {
@@ -343,57 +377,151 @@ onMounted(loadCategories)
 
   <el-dialog
     v-model="dialogVisible"
-    :title="dialogTitle"
-    width="520px"
+    width="min(820px, calc(100vw - 32px))"
     destroy-on-close
+    align-center
+    class="category-dialog"
   >
-    <el-form label-width="100px" @submit.prevent="saveCategory">
-      <el-form-item label="分类名称" required>
-        <el-input
-          v-model="form.name"
-          placeholder="请输入分类名称"
-          maxlength="120"
-          show-word-limit
-        />
-      </el-form-item>
-      <el-form-item v-if="editingCategoryId === null" label="分类等级">
-        {{ form.parentId === null ? '一级分类' : `二级分类（${parentCategoryName()}）` }}
-      </el-form-item>
-      <el-form-item v-else label="上级分类">
-        <el-select
-          v-model="form.parentId"
-          placeholder="不选择则创建一级分类"
-          no-data-text="暂无可选一级分类"
-          clearable
-          @clear="form.parentId = null"
-          :disabled="editingCategoryHasChildren"
-        >
-          <el-option
-            v-for="category in parentOptions"
-            :key="category.id"
-            :label="category.name"
-            :value="category.id"
+    <template #header>
+      <div class="category-dialog-header">
+        <span class="category-dialog-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7.2-7.2a2 2 0 0 1-.6-1.4V4a1 1 0 0 1 1-1h8a2 2 0 0 1 1.4.6l7.4 7.4a2 2 0 0 1 0 2.8Z" />
+            <circle cx="7.5" cy="7.5" r="1.5" />
+          </svg>
+        </span>
+        <span class="category-dialog-title">
+          <strong>{{ dialogTitle }}</strong>
+          <small>{{ dialogSubtitle }}</small>
+        </span>
+        <button type="button" class="dialog-close" aria-label="关闭" @click="dialogVisible = false">
+          ×
+        </button>
+      </div>
+    </template>
+
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="cat-icon-folder" viewBox="0 0 24 24">
+        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+      </symbol>
+      <symbol id="cat-icon-lock" viewBox="0 0 24 24">
+        <rect x="5" y="10" width="14" height="10" rx="2" />
+        <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+      </symbol>
+      <symbol id="cat-icon-layers" viewBox="0 0 24 24">
+        <path d="M12 3 3 8l9 5 9-5-9-5Z" />
+        <path d="m3 13 9 5 9-5" />
+      </symbol>
+      <symbol id="cat-icon-bulb" viewBox="0 0 24 24">
+        <path d="M9 18h6M10 21h4" />
+        <path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5.9 1.2.9 2h5.2c0-.8.3-1.5.9-2A6 6 0 0 0 12 3Z" />
+      </symbol>
+    </svg>
+
+    <el-form class="category-form" label-position="top" @submit.prevent="saveCategory">
+      <div class="category-grid">
+        <section class="category-card">
+          <header class="card-header">
+            <svg class="card-icon"><use href="#cat-icon-folder" /></svg>
+            <strong>分类信息</strong>
+            <span class="level-tag">{{ form.parentId === null ? '一级目录' : '二级目录' }}</span>
+          </header>
+          <div class="field-label">分类名称 <em>*</em></div>
+          <el-input
+            v-model="form.name"
+            placeholder="请输入分类名称"
+            maxlength="120"
+            show-word-limit
           />
-        </el-select>
-        <div v-if="editingCategoryHasChildren" class="field-help">
-          该一级分类包含子分类，不能调整上级分类。
-        </div>
-      </el-form-item>
-      <el-form-item label="排序" required>
-        <el-input-number v-model="form.sortOrder" :step="1" aria-label="分类排序" />
-      </el-form-item>
+          <div class="field-label level-label">分类等级</div>
+          <div v-if="editingCategoryId === null" class="level-readonly">
+            <span>{{ levelLabel }}</span>
+            <span class="level-lock">
+              <svg class="card-icon"><use href="#cat-icon-lock" /></svg>
+              创建后不可更改
+            </span>
+          </div>
+          <template v-else>
+            <el-select
+              v-model="form.parentId"
+              placeholder="不选择则创建一级分类"
+              no-data-text="暂无可选一级分类"
+              clearable
+              :disabled="editingCategoryHasChildren"
+              @clear="form.parentId = null"
+            >
+              <el-option
+                v-for="category in parentOptions"
+                :key="category.id"
+                :label="category.name"
+                :value="category.id"
+              />
+            </el-select>
+            <div v-if="editingCategoryHasChildren" class="field-help">
+              该一级分类包含子分类，不能调整上级分类。
+            </div>
+          </template>
+          <div class="field-label sort-label">排序</div>
+          <div class="sort-stepper">
+            <el-button aria-label="减少排序" @click="stepSortOrder(-1)">−</el-button>
+            <el-input-number v-model="form.sortOrder" :step="1" aria-label="分类排序" />
+            <el-button aria-label="增加排序" @click="stepSortOrder(1)">+</el-button>
+          </div>
+          <div class="field-help sort-help">数值越小，在分类列表中越靠前</div>
+        </section>
+
+        <aside class="category-side">
+          <section class="category-card hierarchy-card">
+            <header class="card-header">
+              <svg class="card-icon"><use href="#cat-icon-layers" /></svg>
+              <strong>分类层级</strong>
+              <span class="level-count">共 3 级</span>
+            </header>
+            <ul class="hierarchy-list">
+              <li
+                v-for="step in hierarchySteps"
+                :key="step.label"
+                :class="`is-${step.state}`"
+              >
+                <span class="hierarchy-dot">{{ step.state === 'done' ? '✓' : '' }}</span>
+                <span class="hierarchy-label">{{ step.label }}</span>
+                <span class="hierarchy-hint">{{ step.hint }}</span>
+              </li>
+            </ul>
+            <p class="hierarchy-note">一级分类下可继续创建二级分类，产品需挂在二级分类下。</p>
+          </section>
+
+          <section class="category-card">
+            <header class="card-header">
+              <svg class="card-icon"><use href="#cat-icon-bulb" /></svg>
+              <strong>命名建议</strong>
+            </header>
+            <ul class="suggestion-list">
+              <li>使用通用大类名称，如「肉类」「毛肚」</li>
+              <li>名称保持简洁，便于后台快速检索</li>
+              <li>同一层级下分类名称不可重复</li>
+            </ul>
+          </section>
+        </aside>
+      </div>
+
       <el-alert
         v-if="dialogError"
         :title="dialogError"
         type="error"
         show-icon
         :closable="false"
+        class="category-form-alert"
       />
+
+      <footer class="category-footer">
+        <span class="footer-note">带 * 为必填项，保存后在分类列表中继续维护</span>
+        <div class="form-actions">
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="saveCategory">保存</el-button>
+        </div>
+      </footer>
     </el-form>
-    <template #footer>
-      <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="saveCategory">保存</el-button>
-    </template>
   </el-dialog>
 </template>
 
@@ -409,7 +537,7 @@ onMounted(loadCategories)
 }
 
 .field-help {
-  color: #909399;
+  color: var(--app-text-muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -423,5 +551,297 @@ onMounted(loadCategories)
 
 .category-child-name {
   padding-left: 24px;
+}
+
+.icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.category-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.category-dialog-icon {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--el-color-primary);
+  color: #ffffff;
+}
+
+.category-dialog-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.category-dialog-title {
+  display: grid;
+  gap: 3px;
+}
+
+.category-dialog-title strong {
+  color: var(--app-text);
+  font-size: 17px;
+}
+
+.category-dialog-title small {
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.dialog-close {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--app-text-muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dialog-close:hover {
+  color: var(--app-text);
+}
+
+.category-form {
+  display: grid;
+  gap: 16px;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.category-side {
+  display: grid;
+  gap: 16px;
+}
+
+.category-card {
+  padding: 18px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: var(--app-text);
+}
+
+.card-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: var(--el-color-primary);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.level-tag,
+.level-count {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--app-brand-soft);
+  color: var(--el-color-primary);
+  font-size: 11px;
+}
+
+.level-count {
+  margin-left: auto;
+}
+
+.field-label {
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--app-text);
+}
+
+.field-label em {
+  color: var(--el-color-danger);
+  font-style: normal;
+}
+
+.level-label,
+.sort-label {
+  margin-top: 16px;
+}
+
+.level-readonly {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: var(--app-surface-soft);
+  color: var(--app-text);
+  font-size: 13px;
+}
+
+.level-lock {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.level-lock .card-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--app-text-muted);
+}
+
+.sort-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sort-stepper .el-input-number {
+  width: 120px;
+}
+
+.sort-help {
+  margin-top: 6px;
+}
+
+.hierarchy-card {
+  background: linear-gradient(180deg, var(--app-brand-soft), var(--app-surface));
+}
+
+.hierarchy-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hierarchy-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--app-text-muted);
+  font-size: 13px;
+}
+
+.hierarchy-dot {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--app-border);
+  border-radius: 50%;
+  background: var(--app-surface);
+  font-size: 11px;
+  color: #ffffff;
+}
+
+.hierarchy-list li.is-done .hierarchy-dot,
+.hierarchy-list li.is-current .hierarchy-dot {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary);
+}
+
+.hierarchy-list li.is-current,
+.hierarchy-list li.is-done {
+  color: var(--app-text);
+  font-weight: 600;
+}
+
+.hierarchy-hint {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.hierarchy-note {
+  margin: 16px 0 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.suggestion-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.suggestion-list li::marker {
+  color: var(--el-color-primary);
+}
+
+.category-form-alert {
+  margin: 0;
+}
+
+.category-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.footer-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.category-dialog :deep(.el-dialog__body) {
+  max-height: calc(100vh - 180px);
+  overflow: auto;
+  padding-top: 8px;
+}
+
+@media (max-width: 720px) {
+  .category-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .category-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>

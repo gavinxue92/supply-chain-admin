@@ -35,9 +35,16 @@ const failedUploads = ref<FailedUpload[]>([])
 const nextFailureId = ref(0)
 const selectedCount = computed(() => props.modelValue.length)
 const accept = 'image/jpeg,image/png,image/webp'
+const uploadDisabled = computed(
+  () => activeFilename.value !== '' || (props.multiple && selectedCount.value >= props.maxCount),
+)
 
 function mediaUrl(media: ConfirmedMediaVO): string {
   return media.publicUrl || `/api/v1/media/${media.id}`
+}
+
+function openFilePicker() {
+  if (!uploadDisabled.value) input.value?.click()
 }
 
 function removeMedia(mediaId: number) {
@@ -114,31 +121,50 @@ async function handleFileSelection(event: Event) {
       :aria-label="`上传${label}`"
       @change="handleFileSelection"
     />
-    <el-button
-      type="primary"
-      plain
-      :disabled="activeFilename !== '' || (multiple && selectedCount >= maxCount)"
-      @click="input?.click()"
-    >
-      上传{{ label }}
-    </el-button>
-    <span v-if="activeFilename" role="status">正在上传：{{ activeFilename }}</span>
 
-    <ul v-if="modelValue.length" class="media-list">
-      <li v-for="media in modelValue" :key="media.id">
-        <el-image :src="mediaUrl(media)" fit="cover" class="media-preview" />
-        <span>{{ media.originalFilename }}（已确认）</span>
-        <el-button
-          v-if="allowInsert"
-          link
-          type="primary"
-          @click="emit('insert', media)"
-        >
-          插入详情
-        </el-button>
-        <el-button link type="danger" @click="removeMedia(media.id)">移除</el-button>
-      </li>
-    </ul>
+    <div
+      class="media-upload-box"
+      :class="{ 'is-disabled': uploadDisabled, 'has-media': modelValue.length > 0 }"
+      role="button"
+      tabindex="0"
+      @click="openFilePicker"
+      @keydown.enter.prevent="openFilePicker"
+      @keydown.space.prevent="openFilePicker"
+    >
+      <template v-if="modelValue.length === 0">
+        <svg class="upload-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 16V4m0 0L8 8m4-4 4 4" />
+          <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+        </svg>
+        <span>上传{{ label }}</span>
+      </template>
+      <div v-else class="media-preview-grid">
+        <div v-for="media in modelValue" :key="media.id" class="media-preview-item">
+          <span class="media-preview-wrap" @click.stop>
+            <el-image
+              :src="mediaUrl(media)"
+              fit="cover"
+              class="media-preview"
+              :preview-src-list="[mediaUrl(media)]"
+            />
+          </span>
+          <span class="media-confirmed">已确认</span>
+          <div class="media-preview-actions">
+            <el-button
+              v-if="allowInsert"
+              link
+              type="primary"
+              @click.stop="emit('insert', media)"
+            >
+              插入详情
+            </el-button>
+            <el-button link type="danger" @click.stop="removeMedia(media.id)">移除</el-button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <span v-if="activeFilename" role="status">正在上传：{{ activeFilename }}</span>
 
     <ul v-if="failedUploads.length" class="upload-errors" aria-live="polite">
       <li v-for="failed in failedUploads" :key="failed.id">
@@ -159,21 +185,21 @@ async function handleFileSelection(event: Event) {
 <style scoped>
 .media-picker {
   display: grid;
-  justify-items: start;
   gap: 8px;
-}
-
-.media-picker-heading,
-.media-list li,
-.upload-errors li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  min-width: 0;
 }
 
 .media-picker-heading {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  width: 100%;
+  font-size: 13px;
+  color: var(--app-text);
+}
+
+.media-picker-heading span {
+  color: var(--app-text-muted);
+  font-size: 12px;
 }
 
 .media-file-input {
@@ -186,22 +212,102 @@ async function handleFileSelection(event: Event) {
   clip-path: inset(50%);
 }
 
-.media-list,
-.upload-errors {
-  display: grid;
+.media-upload-box {
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
+  padding: 12px;
+  border: 1px dashed var(--el-color-primary-light-5);
+  border-radius: 10px;
+  background: var(--app-surface-soft);
+  color: var(--el-color-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.media-upload-box:hover {
+  border-color: var(--el-color-primary);
+  background: var(--app-brand-soft);
+}
+
+.media-upload-box.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.media-upload-box.has-media {
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.upload-icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.media-preview-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.media-preview-item {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.media-preview-wrap {
+  display: inline-flex;
 }
 
 .media-preview {
-  width: 48px;
-  height: 48px;
-  border-radius: 4px;
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+}
+
+.media-confirmed {
+  font-size: 11px;
+  color: var(--el-color-primary);
+}
+
+.media-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.media-preview-actions .el-button {
+  height: auto;
+  padding: 0;
+  font-size: 11px;
 }
 
 .upload-errors {
-  color: #f56c6c;
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  color: var(--el-color-danger);
+  font-size: 12px;
+}
+
+.upload-errors li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

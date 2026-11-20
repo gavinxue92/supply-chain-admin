@@ -12,6 +12,7 @@ vi.mock('../src/api/product', () => ({
   unpublishProduct: vi.fn(),
   archiveProduct: vi.fn(),
   restoreProduct: vi.fn(),
+  deleteProduct: vi.fn(),
 }))
 vi.mock('../src/api/category', () => ({
   listCategories: vi.fn(),
@@ -20,14 +21,53 @@ vi.mock('../src/api/category', () => ({
   setCategoryStatus: vi.fn(),
   deleteCategory: vi.fn(),
 }))
+vi.mock('../src/api/contact', () => ({
+  listCustomerServices: vi.fn(),
+}))
 
 import * as productApi from '../src/api/product'
 import * as categoryApi from '../src/api/category'
+import * as contactApi from '../src/api/contact'
 import { useAuthStore } from '../src/stores/auth'
+import type { ProductVO } from '../src/types/product'
+import ProductForm from '../src/components/ProductForm.vue'
 import ProductView from '../src/views/ProductView.vue'
 
 describe('产品管理页面', () => {
   const wrappers: ReturnType<typeof mount>[] = []
+
+  function product(overrides: Partial<ProductVO> = {}): ProductVO {
+    return {
+      id: 1,
+      status: 'DRAFT',
+      name: '产品',
+      categoryId: null,
+      detailText: '',
+      mainImageMediaId: null,
+      galleryMediaIds: [],
+      keywords: [],
+      contactMode: 'INHERIT',
+      contactServiceIds: [],
+      sortOrder: 0,
+      specifications: [],
+      ...overrides,
+    }
+  }
+
+  async function selectOption(wrapper: ReturnType<typeof mount>, index: number, label: string) {
+    const wrappers = wrapper.findAll('.product-filter .el-select__wrapper')
+    expect(wrappers.length).toBeGreaterThan(index)
+    await wrappers[index].trigger('click')
+    await flushPromises()
+    const option = Array.from(
+      document.body.querySelectorAll<HTMLElement>(
+        '.product-filter-popper .el-select-dropdown__item',
+      ),
+    ).find((item) => item.textContent?.trim() === label)
+    expect(option).toBeDefined()
+    option?.click()
+    await flushPromises()
+  }
 
   async function confirmAction() {
     const buttons = document.body.querySelectorAll<HTMLButtonElement>(
@@ -43,12 +83,14 @@ describe('产品管理页面', () => {
     setActivePinia(createPinia())
     useAuthStore().restoreSession({
       username: 'admin',
+      nickname: null,
       role: 'ADMIN',
       mustChangePassword: false,
     })
     vi.resetAllMocks()
     vi.mocked(productApi.listProducts).mockResolvedValue([])
     vi.mocked(categoryApi.listCategories).mockResolvedValue([])
+    vi.mocked(contactApi.listCustomerServices).mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -70,8 +112,7 @@ describe('产品管理页面', () => {
         galleryMediaIds: [],
         keywords: [],
         contactMode: 'INHERIT',
-        contactWechatId: null,
-        contactQrMediaId: null,
+        contactServiceIds: [],
         sortOrder: 0,
         specifications: [],
       },
@@ -85,8 +126,7 @@ describe('产品管理页面', () => {
         galleryMediaIds: [],
         keywords: [],
         contactMode: 'INHERIT',
-        contactWechatId: null,
-        contactQrMediaId: null,
+        contactServiceIds: [],
         sortOrder: 0,
         specifications: [],
       },
@@ -100,8 +140,7 @@ describe('产品管理页面', () => {
         galleryMediaIds: [],
         keywords: [],
         contactMode: 'DISABLED',
-        contactWechatId: null,
-        contactQrMediaId: null,
+        contactServiceIds: [],
         sortOrder: 0,
         specifications: [],
       },
@@ -115,8 +154,7 @@ describe('产品管理页面', () => {
         galleryMediaIds: [],
         keywords: [],
         contactMode: 'INHERIT',
-        contactWechatId: null,
-        contactQrMediaId: null,
+        contactServiceIds: [],
         sortOrder: 0,
         specifications: [],
       },
@@ -144,8 +182,8 @@ describe('产品管理页面', () => {
         expect.stringContaining('已归档'),
       ]),
     )
-    expect(wrapper.text()).not.toContain('筛选')
-    expect(wrapper.text()).not.toContain('排序')
+    expect(wrapper.find('input[placeholder="搜索产品名称或关键词"]').exists()).toBe(true)
+    expect(wrapper.findAll('.product-filter .el-select__wrapper')).toHaveLength(2)
   })
 
   it('创建草稿时提交完整替换内容和动态规格', async () => {
@@ -159,8 +197,7 @@ describe('产品管理页面', () => {
       galleryMediaIds: [],
       keywords: ['带鱼', '冻带鱼'],
       contactMode: 'INHERIT' as const,
-      contactWechatId: null,
-      contactQrMediaId: null,
+      contactServiceIds: [],
       sortOrder: 0,
       specifications: [{ id: 1, name: '500g', referencePrice: null, sortOrder: 0 }],
     }
@@ -199,8 +236,7 @@ describe('产品管理页面', () => {
       galleryMediaIds: [],
       keywords: ['带鱼', '冻带鱼'],
       contactMode: 'INHERIT',
-      contactWechatId: null,
-      contactQrMediaId: null,
+      contactServiceIds: [],
       sortOrder: 0,
       specifications: [{ name: '500g', referencePrice: null }],
     })
@@ -208,33 +244,87 @@ describe('产品管理页面', () => {
     expect(wrapper.text()).toContain('草稿创建成功')
   })
 
-  it('新建产品只提供启用的末级分类', async () => {
-    vi.mocked(categoryApi.listCategories).mockResolvedValue([
-      { id: 1, parentId: null, name: '生鲜', active: true, sortOrder: 0 },
-      { id: 2, parentId: 1, name: '水产', active: true, sortOrder: 0 },
-      { id: 3, parentId: null, name: '饮品', active: true, sortOrder: 1 },
-      { id: 4, parentId: null, name: '停用分类', active: false, sortOrder: 2 },
-      { id: 5, parentId: 1, name: '停用子类', active: false, sortOrder: 1 },
-    ])
-    const wrapper = mount(ProductView, {
+  it('新建产品按一级分类级联选择二级分类', async () => {
+    const wrapper = mount(ProductForm, {
+      props: {
+        product: null,
+        categories: [
+          { id: 1, parentId: null, name: '生鲜', active: true, sortOrder: 0 },
+          { id: 2, parentId: 1, name: '水产', active: true, sortOrder: 0 },
+          { id: 3, parentId: null, name: '饮品', active: true, sortOrder: 1 },
+          { id: 4, parentId: null, name: '停用分类', active: false, sortOrder: 2 },
+          { id: 5, parentId: 1, name: '停用子类', active: false, sortOrder: 1 },
+        ],
+      },
       global: { plugins: [ElementPlus] },
     })
     wrappers.push(wrapper)
     await flushPromises()
-    await wrapper.findAll('button').find((button) => button.text() === '新建产品草稿')?.trigger('click')
+
+    await wrapper.findAll('.el-select__wrapper')[0].trigger('click')
     await flushPromises()
-    await wrapper.get('.el-select__wrapper').trigger('click')
+    let labels = Array.from(
+      document.body.querySelectorAll('.product-form-root-popper .el-select-dropdown__item'),
+      (option) => option.textContent ?? '',
+    )
+    expect(labels.some((label) => label.includes('生鲜'))).toBe(true)
+    expect(labels.some((label) => label.includes('饮品'))).toBe(true)
+    expect(labels.some((label) => label.includes('停用分类'))).toBe(true)
+    expect(labels.some((label) => label.includes('水产'))).toBe(false)
+
+    const rootOption = Array.from(
+      document.body.querySelectorAll('.product-form-root-popper .el-select-dropdown__item'),
+    ).find((option) => option.textContent?.includes('生鲜'))
+    rootOption?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
-    const options = Array.from(
-      document.body.querySelectorAll('.el-select-dropdown__item'),
-      (option) => option.textContent,
+    await wrapper.findAll('.el-select__wrapper')[1].trigger('click')
+    await flushPromises()
+    labels = Array.from(
+      document.body.querySelectorAll('.product-form-second-popper .el-select-dropdown__item'),
+      (option) => option.textContent ?? '',
     )
-    expect(options).toContain('水产')
-    expect(options).toContain('饮品')
-    expect(options).not.toContain('生鲜')
-    expect(options).not.toContain('停用分类')
-    expect(options).not.toContain('停用子类')
+    expect(labels.some((label) => label.includes('水产'))).toBe(true)
+    expect(labels.some((label) => label.includes('停用子类'))).toBe(false)
+    expect(labels.some((label) => label.includes('饮品'))).toBe(false)
+  })
+
+  it('选择一级和二级分类后提交对应末级分类 ID', async () => {
+    const wrapper = mount(ProductForm, {
+      props: {
+        product: null,
+        categories: [
+          { id: 1, parentId: null, name: '生鲜', active: true, sortOrder: 0 },
+          { id: 2, parentId: 1, name: '水产', active: true, sortOrder: 0 },
+        ],
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    wrappers.push(wrapper)
+    await flushPromises()
+    await wrapper.get('input[placeholder="请输入产品名称"]').setValue('分类产品')
+
+    async function chooseOption(selectIndex: number, label: string) {
+      const popperClass =
+        selectIndex === 0 ? '.product-form-root-popper' : '.product-form-second-popper'
+      await wrapper.findAll('.el-select__wrapper')[selectIndex].trigger('click')
+      await flushPromises()
+      const option = Array.from(
+        document.body.querySelectorAll(`${popperClass} .el-select-dropdown__item`),
+      ).find((item) => item.textContent?.includes(label))
+      expect(option).toBeDefined()
+      option?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await flushPromises()
+    }
+
+    await chooseOption(0, '生鲜')
+    await chooseOption(1, '水产')
+    await wrapper.findAll('button').find((button) => button.text() === '保存草稿')?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.emitted('save')?.[0][0]).toEqual(
+      expect.objectContaining({ name: '分类产品', categoryId: 2 }),
+    )
   })
 
   it('取消上架二次确认时不调用状态接口', async () => {
@@ -249,8 +339,7 @@ describe('产品管理页面', () => {
         galleryMediaIds: [],
         keywords: [],
         contactMode: 'INHERIT',
-        contactWechatId: null,
-        contactQrMediaId: null,
+        contactServiceIds: [],
         sortOrder: 0,
         specifications: [],
       },
@@ -285,8 +374,7 @@ describe('产品管理页面', () => {
       galleryMediaIds: [],
       keywords: [],
       contactMode: 'INHERIT' as const,
-      contactWechatId: null,
-      contactQrMediaId: null,
+      contactServiceIds: [],
       sortOrder: 0,
       specifications: [],
     }
@@ -330,9 +418,171 @@ describe('产品管理页面', () => {
     expect(wrapper.text()).toContain('产品已恢复为已下架')
   })
 
+  it('管理员可硬删除已归档产品，二次确认后刷新列表', async () => {
+    const archived = product({ id: 81, status: 'ARCHIVED', name: '待清理产品' })
+    vi.mocked(productApi.listProducts)
+      .mockResolvedValueOnce([archived])
+      .mockResolvedValueOnce([])
+    vi.mocked(productApi.deleteProduct).mockResolvedValue()
+    const confirmationSpy = vi.spyOn(ElMessageBox, 'confirm')
+
+    const wrapper = mount(ProductView, { global: { plugins: [ElementPlus] } })
+    wrappers.push(wrapper)
+    await flushPromises()
+
+    const row = wrapper.findAll('.el-table__body tr')[0]
+    expect(row.findAll('button').map((button) => button.text())).toEqual([
+      '继承全局客服',
+      '恢复',
+      '硬删除',
+    ])
+
+    await wrapper.findAll('button').find((button) => button.text() === '硬删除')?.trigger('click')
+    await flushPromises()
+    expect(confirmationSpy).toHaveBeenLastCalledWith(
+      '硬删除“待清理产品”后不可恢复，其独占媒体也会同步清理。请先确认产品已归档，是否继续？',
+      '确认硬删除产品',
+      expect.any(Object),
+    )
+    expect(productApi.deleteProduct).not.toHaveBeenCalled()
+    await confirmAction()
+
+    expect(productApi.deleteProduct).toHaveBeenCalledWith(81)
+    expect(wrapper.text()).toContain('产品“待清理产品”已硬删除')
+    expect(wrapper.findAll('.el-table__body tr')).toHaveLength(0)
+  })
+
+  it('新建产品直接选择已配置客服并提交 ID 列表', async () => {
+    vi.mocked(contactApi.listCustomerServices).mockResolvedValue([
+      {
+        id: 301,
+        displayName: '客服小李',
+        wechatId: 'kefu-li',
+        qrMediaId: null,
+        qrImageUrl: null,
+        phone: '13800138000',
+        active: true,
+      },
+      {
+        id: 302,
+        displayName: '停用客服',
+        wechatId: null,
+        qrMediaId: null,
+        qrImageUrl: null,
+        phone: null,
+        active: false,
+      },
+    ])
+    vi.mocked(productApi.createProduct).mockResolvedValue(
+      product({ id: 91, name: '带客服产品', contactMode: 'OVERRIDE', contactServiceIds: [301] }),
+    )
+
+    const wrapper = mount(ProductView, { global: { plugins: [ElementPlus] } })
+    wrappers.push(wrapper)
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === '新建产品草稿')?.trigger('click')
+    await flushPromises()
+
+    await wrapper.get('input[placeholder="请输入产品名称"]').setValue('带客服产品')
+    const contactSelect = wrapper.find('.contact-service-select .el-select__wrapper')
+    await contactSelect.trigger('click')
+    await flushPromises()
+    const option = Array.from(document.body.querySelectorAll('.el-select-dropdown__item'))
+      .find((item) => item.textContent?.includes('客服小李'))
+    expect(option).toBeDefined()
+    option?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === '保存草稿')?.trigger('click')
+    await flushPromises()
+
+    expect(productApi.createProduct).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: '带客服产品',
+        contactMode: 'OVERRIDE',
+        contactServiceIds: [301],
+      }),
+    )
+  })
+
+  it('产品列表点击当前客服可在行内更换并直接保存整份内容', async () => {
+    const original = product({
+      id: 70,
+      name: '带客服产品',
+      categoryId: 2,
+      detailText: '<p>产品详情</p>',
+      keywords: ['冻品'],
+      galleryMediaIds: [305],
+      contactMode: 'OVERRIDE',
+      contactServiceIds: [301],
+      sortOrder: 3,
+    })
+    const updated = { ...original, contactServiceIds: [303] }
+    vi.mocked(contactApi.listCustomerServices).mockResolvedValue([
+      {
+        id: 301,
+        displayName: '客服小李',
+        wechatId: 'kefu-li',
+        qrMediaId: null,
+        qrImageUrl: null,
+        phone: '13800138000',
+        active: true,
+      },
+      {
+        id: 303,
+        displayName: '客服小王',
+        wechatId: 'kefu-wang',
+        qrMediaId: null,
+        qrImageUrl: null,
+        phone: '13900139000',
+        active: true,
+      },
+    ])
+    vi.mocked(productApi.listProducts)
+      .mockResolvedValueOnce([original])
+      .mockResolvedValueOnce([updated])
+    vi.mocked(productApi.updateProduct).mockResolvedValue(updated)
+
+    const wrapper = mount(ProductView, { global: { plugins: [ElementPlus] } })
+    wrappers.push(wrapper)
+    await flushPromises()
+
+    const row = wrapper.findAll('.el-table__body tr')[0]
+    expect(row.text()).toContain('客服小李')
+    await row.findAll('button').find((button) => button.text() === '客服小李')?.trigger('click')
+    await flushPromises()
+
+    await wrapper.get('.product-contact-select .el-select__wrapper').trigger('click')
+    await flushPromises()
+    const option = Array.from(document.body.querySelectorAll('.el-select-dropdown__item'))
+      .find((item) => item.textContent?.includes('客服小王'))
+    expect(option).toBeDefined()
+    option?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === '保存')?.trigger('click')
+    await flushPromises()
+
+    expect(productApi.updateProduct).toHaveBeenCalledWith(70, {
+      name: '带客服产品',
+      categoryId: 2,
+      detailText: '<p>产品详情</p>',
+      mainImageMediaId: null,
+      galleryMediaIds: [305],
+      keywords: ['冻品'],
+      contactMode: 'OVERRIDE',
+      contactServiceIds: [303],
+      sortOrder: 3,
+      specifications: [],
+    })
+    expect(wrapper.text()).toContain('产品“带客服产品”客服已更新')
+    expect(wrapper.findAll('.el-table__body tr')[0].text()).toContain('客服小王')
+  })
+
   it('EDITOR 只看到当前状态允许的操作，不显示归档或恢复', async () => {
     useAuthStore().restoreSession({
       username: 'editor',
+      nickname: null,
       role: 'EDITOR',
       mustChangePassword: false,
     })
@@ -347,8 +597,7 @@ describe('产品管理页面', () => {
         galleryMediaIds: [],
         keywords: [],
         contactMode: 'INHERIT',
-        contactWechatId: null,
-        contactQrMediaId: null,
+        contactServiceIds: [],
         sortOrder: 0,
         specifications: [],
       },
@@ -362,8 +611,7 @@ describe('产品管理页面', () => {
         galleryMediaIds: [],
         keywords: [],
         contactMode: 'INHERIT',
-        contactWechatId: null,
-        contactQrMediaId: null,
+        contactServiceIds: [],
         sortOrder: 0,
         specifications: [],
       },
@@ -377,8 +625,7 @@ describe('产品管理页面', () => {
         galleryMediaIds: [],
         keywords: [],
         contactMode: 'INHERIT',
-        contactWechatId: null,
-        contactQrMediaId: null,
+        contactServiceIds: [],
         sortOrder: 0,
         specifications: [],
       },
@@ -392,8 +639,7 @@ describe('产品管理页面', () => {
         galleryMediaIds: [],
         keywords: [],
         contactMode: 'INHERIT',
-        contactWechatId: null,
-        contactQrMediaId: null,
+        contactServiceIds: [],
         sortOrder: 0,
         specifications: [],
       },
@@ -410,10 +656,10 @@ describe('产品管理页面', () => {
     const actions = rows.map((row) =>
       row.findAll('button').map((button) => button.text()),
     )
-    expect(actions[0]).toEqual(['编辑', '上架'])
-    expect(actions[1]).toEqual(['编辑', '下架'])
-    expect(actions[2]).toEqual(['编辑', '上架'])
-    expect(actions[3]).toEqual([])
+    expect(actions[0]).toEqual(['继承全局客服', '编辑', '上架'])
+    expect(actions[1]).toEqual(['继承全局客服', '编辑', '下架'])
+    expect(actions[2]).toEqual(['继承全局客服', '编辑', '上架'])
+    expect(actions[3]).toEqual(['继承全局客服'])
   })
 
   it('更新产品失败时保留完整表单输入并显示后端原因', async () => {
@@ -427,8 +673,7 @@ describe('产品管理页面', () => {
       galleryMediaIds: [],
       keywords: ['旧关键词'],
       contactMode: 'INHERIT' as const,
-      contactWechatId: null,
-      contactQrMediaId: null,
+      contactServiceIds: [],
       sortOrder: 2,
       specifications: [{ id: 1, name: '500g', referencePrice: 18.5, sortOrder: 0 }],
     }
@@ -462,8 +707,7 @@ describe('产品管理页面', () => {
       galleryMediaIds: [],
       keywords: ['旧关键词'],
       contactMode: 'INHERIT',
-      contactWechatId: null,
-      contactQrMediaId: null,
+      contactServiceIds: [],
       sortOrder: 2,
       specifications: [{ name: '500g', referencePrice: 18.5 }],
     })
@@ -483,8 +727,7 @@ describe('产品管理页面', () => {
       galleryMediaIds: [],
       keywords: [],
       contactMode: 'INHERIT' as const,
-      contactWechatId: null,
-      contactQrMediaId: null,
+      contactServiceIds: [],
       sortOrder: 0,
       specifications: [],
     }
@@ -521,8 +764,7 @@ describe('产品管理页面', () => {
       galleryMediaIds: [],
       keywords: [],
       contactMode: 'INHERIT',
-      contactWechatId: null,
-      contactQrMediaId: null,
+      contactServiceIds: [],
       sortOrder: 0,
       specifications: [],
     })
@@ -530,5 +772,179 @@ describe('产品管理页面', () => {
     expect(wrapper.text()).toContain('产品保存成功，已立即生效')
     expect(wrapper.text()).toContain('已上架')
     expect(wrapper.text()).not.toContain('发布版本')
+  })
+
+  it('列表展示分类路径和主图缩略图', async () => {
+    vi.mocked(categoryApi.listCategories).mockResolvedValue([
+      { id: 1, parentId: null, name: '生鲜', active: true, sortOrder: 0 },
+      { id: 2, parentId: 1, name: '水产', active: true, sortOrder: 0 },
+    ])
+    vi.mocked(productApi.listProducts).mockResolvedValue([
+      product({ id: 1, name: '冷冻带鱼', categoryId: 2, mainImageMediaId: 301 }),
+      product({ id: 2, name: '未分类产品' }),
+    ])
+
+    const wrapper = mount(ProductView, { global: { plugins: [ElementPlus] } })
+    wrappers.push(wrapper)
+    await flushPromises()
+
+    const rows = wrapper.findAll('.el-table__body tr')
+    expect(rows[0].text()).toContain('生鲜 / 水产')
+    expect(rows[0].find('img').attributes('src')).toContain('/api/v1/media/301')
+    expect(rows[1].text()).toContain('未分类')
+    expect(rows[1].find('img').exists()).toBe(false)
+  })
+
+  it('草稿表单实时展示填写进度', async () => {
+    const wrapper = mount(ProductForm, {
+      props: {
+        product: null,
+        categories: [
+          { id: 1, parentId: null, name: '生鲜', active: true, sortOrder: 0 },
+          { id: 2, parentId: 1, name: '水产', active: true, sortOrder: 0 },
+        ],
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    wrappers.push(wrapper)
+    await flushPromises()
+
+    expect(wrapper.get('.progress-summary').text()).toContain('0/5')
+    expect(wrapper.get('.progress-summary').text()).toContain('还有 5 项待补充')
+
+    await wrapper.get('input[placeholder="请输入产品名称"]').setValue('进度产品')
+    await flushPromises()
+    expect(wrapper.get('.progress-summary').text()).toContain('0/5')
+
+    await wrapper.findAll('.el-select__wrapper')[0].trigger('click')
+    await flushPromises()
+    const rootOption = Array.from(
+      document.body.querySelectorAll('.product-form-root-popper .el-select-dropdown__item'),
+    ).find((option) => option.textContent?.includes('生鲜'))
+    rootOption?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    await wrapper.findAll('.el-select__wrapper')[1].trigger('click')
+    await flushPromises()
+    const secondOption = Array.from(
+      document.body.querySelectorAll('.product-form-second-popper .el-select-dropdown__item'),
+    ).find((option) => option.textContent?.includes('水产'))
+    secondOption?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(wrapper.get('.progress-summary').text()).toContain('1/5')
+    expect(wrapper.findAll('.progress-list li.is-done')).toHaveLength(1)
+
+    await wrapper.get('textarea[placeholder="每行输入一个关键词"]').setValue('冻品')
+    await flushPromises()
+    expect(wrapper.get('.progress-summary').text()).toContain('2/5')
+    expect(wrapper.get('.progress-summary').text()).toContain('还有 3 项待补充')
+    expect(wrapper.findAll('.progress-list li.is-done')).toHaveLength(2)
+  })
+
+  it('上传图片只在对应的素材框内展示', async () => {
+    const wrapper = mount(ProductForm, {
+      props: {
+        product: product({
+          mainImageMediaId: 11,
+          galleryMediaIds: [12, 13],
+          detailText: '<p><img src="/api/v1/media/14" alt=""></p>',
+        }),
+        categories: [],
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    wrappers.push(wrapper)
+    await flushPromises()
+
+    const boxes = wrapper.findAll('.media-picker')
+    expect(boxes).toHaveLength(3)
+    expect(boxes[0].findAll('.media-preview')).toHaveLength(1)
+    expect(boxes[1].findAll('.media-preview')).toHaveLength(2)
+    expect(boxes[2].findAll('.media-preview')).toHaveLength(1)
+    expect(boxes[0].text()).not.toContain('gallery-12')
+  })
+
+  it('按名称或关键词模糊搜索产品', async () => {
+    vi.mocked(productApi.listProducts).mockResolvedValue([
+      product({ id: 1, name: '冷冻带鱼', keywords: ['海鲜'] }),
+      product({ id: 2, name: '冷冻虾', keywords: ['水产'] }),
+      product({ id: 3, name: '苹果', keywords: ['水果'] }),
+    ])
+
+    const wrapper = mount(ProductView, { global: { plugins: [ElementPlus] } })
+    wrappers.push(wrapper)
+    await flushPromises()
+    const search = wrapper.get('input[placeholder="搜索产品名称或关键词"]')
+
+    await search.setValue('带鱼')
+    await flushPromises()
+    let rows = wrapper.findAll('.el-table__body tr')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].text()).toContain('冷冻带鱼')
+
+    await search.setValue('水产')
+    await flushPromises()
+    rows = wrapper.findAll('.el-table__body tr')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].text()).toContain('冷冻虾')
+
+    await search.setValue('')
+    await flushPromises()
+    expect(wrapper.findAll('.el-table__body tr')).toHaveLength(3)
+  })
+
+  it('选择一级分类时包含该分类及其子分类下的产品', async () => {
+    vi.mocked(categoryApi.listCategories).mockResolvedValue([
+      { id: 1, parentId: null, name: '生鲜', active: true, sortOrder: 0 },
+      { id: 2, parentId: 1, name: '水产', active: true, sortOrder: 0 },
+      { id: 3, parentId: null, name: '饮品', active: true, sortOrder: 1 },
+    ])
+    vi.mocked(productApi.listProducts).mockResolvedValue([
+      product({ id: 1, name: '一级分类产品', categoryId: 1 }),
+      product({ id: 2, name: '二级分类产品', categoryId: 2 }),
+      product({ id: 3, name: '其他分类产品', categoryId: 3 }),
+    ])
+
+    const wrapper = mount(ProductView, { global: { plugins: [ElementPlus] } })
+    wrappers.push(wrapper)
+    await flushPromises()
+    await selectOption(wrapper, 0, '生鲜')
+
+    const rows = wrapper.findAll('.el-table__body tr')
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => row.text())).toEqual([
+      expect.stringContaining('一级分类产品'),
+      expect.stringContaining('二级分类产品'),
+    ])
+  })
+
+  it('级联选择一级和二级分类后可叠加关键词搜索', async () => {
+    vi.mocked(categoryApi.listCategories).mockResolvedValue([
+      { id: 1, parentId: null, name: '生鲜', active: true, sortOrder: 0 },
+      { id: 2, parentId: 1, name: '水产', active: true, sortOrder: 0 },
+      { id: 3, parentId: 1, name: '肉类', active: true, sortOrder: 1 },
+      { id: 4, parentId: null, name: '饮品', active: true, sortOrder: 1 },
+    ])
+    vi.mocked(productApi.listProducts).mockResolvedValue([
+      product({ id: 1, name: '冷冻带鱼', categoryId: 2 }),
+      product({ id: 2, name: '鲜虾', categoryId: 2 }),
+      product({ id: 3, name: '牛肉', categoryId: 3 }),
+      product({ id: 4, name: '果汁', categoryId: 4 }),
+    ])
+
+    const wrapper = mount(ProductView, { global: { plugins: [ElementPlus] } })
+    wrappers.push(wrapper)
+    await flushPromises()
+    await selectOption(wrapper, 0, '生鲜')
+    await selectOption(wrapper, 1, '水产')
+
+    let rows = wrapper.findAll('.el-table__body tr')
+    expect(rows).toHaveLength(2)
+
+    await wrapper.get('input[placeholder="搜索产品名称或关键词"]').setValue('带鱼')
+    await flushPromises()
+    rows = wrapper.findAll('.el-table__body tr')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].text()).toContain('冷冻带鱼')
   })
 })

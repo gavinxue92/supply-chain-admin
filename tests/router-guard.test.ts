@@ -22,6 +22,7 @@ describe('路由守卫', () => {
     const store = useAuthStore()
     store.restoreSession({
       username: 'editor',
+      nickname: null,
       role: 'EDITOR',
       mustChangePassword: false,
     })
@@ -33,10 +34,44 @@ describe('路由守卫', () => {
     expect(router.currentRoute.value.name).toBe('home')
   })
 
+  it('EDITOR 无权访问客服配置页面并收到 403 提示', async () => {
+    const store = useAuthStore()
+    store.restoreSession({
+      username: 'editor',
+      nickname: null,
+      role: 'EDITOR',
+      mustChangePassword: false,
+    })
+
+    const router = createAppRouter(createMemoryHistory())
+    await router.push('/contact')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('home')
+    expect(document.body.textContent).toContain('403')
+  })
+
+  it('ADMIN 可进入客服配置页面', async () => {
+    const store = useAuthStore()
+    store.restoreSession({
+      username: 'admin',
+      nickname: null,
+      role: 'ADMIN',
+      mustChangePassword: false,
+    })
+
+    const router = createAppRouter(createMemoryHistory())
+    await router.push('/contact')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('contact')
+  })
+
   it('ADMIN 可进入账号管理页面', async () => {
     const store = useAuthStore()
     store.restoreSession({
       username: 'admin',
+      nickname: null,
       role: 'ADMIN',
       mustChangePassword: false,
     })

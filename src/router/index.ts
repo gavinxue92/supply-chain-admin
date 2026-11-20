@@ -1,10 +1,13 @@
 import { createRouter, createWebHistory, type RouterHistory } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
 import LoginView from '../views/LoginView.vue'
 import ChangePasswordView from '../views/ChangePasswordView.vue'
 import AppLayout from '../views/AppLayout.vue'
 import CategoryView from '../views/CategoryView.vue'
 import ProductView from '../views/ProductView.vue'
+import ContactView from '../views/ContactView.vue'
+import AccountView from '../views/AccountView.vue'
 import PlaceholderView from '../views/PlaceholderView.vue'
 
 export function createAppRouter(history: RouterHistory = createWebHistory()) {
@@ -21,8 +24,8 @@ export function createAppRouter(history: RouterHistory = createWebHistory()) {
           { path: '', name: 'home', component: PlaceholderView, meta: { title: '首页' } },
           { path: 'products', name: 'products', component: ProductView, meta: { title: '产品管理' } },
           { path: 'categories', name: 'categories', component: CategoryView, meta: { title: '分类管理' } },
-          { path: 'contact', name: 'contact', component: PlaceholderView, meta: { title: '客服配置', roles: ['ADMIN', 'EDITOR'] } },
-          { path: 'accounts', name: 'accounts', component: PlaceholderView, meta: { title: '账号管理', roles: ['ADMIN'] } },
+          { path: 'contact', name: 'contact', component: ContactView, meta: { title: '客服配置', roles: ['ADMIN'] } },
+          { path: 'accounts', name: 'accounts', component: AccountView, meta: { title: '账号管理', roles: ['ADMIN'] } },
         ],
       },
     ],
@@ -41,6 +44,7 @@ export function createAppRouter(history: RouterHistory = createWebHistory()) {
     }
     const roles = to.meta.roles as string[] | undefined
     if (roles && auth.role && !roles.includes(auth.role)) {
+      ElMessage.error(`没有权限访问“${String(to.meta.title ?? '该页面')}”（403）`)
       return { name: 'home' }
     }
     return true

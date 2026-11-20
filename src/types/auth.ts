@@ -2,6 +2,7 @@ export type UserRole = 'ADMIN' | 'EDITOR'
 
 export interface SessionUser {
   username: string
+  nickname: string | null
   role: UserRole
   mustChangePassword: boolean
 }

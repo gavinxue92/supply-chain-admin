@@ -26,8 +26,7 @@ export interface ProductVO {
   galleryMediaIds: number[]
   keywords: string[]
   contactMode: ProductContactMode
-  contactWechatId: string | null
-  contactQrMediaId: number | null
+  contactServiceIds: number[]
   sortOrder: number
   specifications: ProductSpecificationVO[]
 }
@@ -40,8 +39,7 @@ export interface ProductDraftRequest {
   galleryMediaIds: number[]
   keywords: string[]
   contactMode: ProductContactMode
-  contactWechatId: string | null
-  contactQrMediaId: number | null
+  contactServiceIds: number[]
   sortOrder: number
   specifications: ProductSpecificationRequest[]
 }

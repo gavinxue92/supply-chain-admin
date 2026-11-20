@@ -443,4 +443,28 @@ describe('分类管理页面', () => {
     expect(wrapper.text()).toContain('分类删除成功')
     expect(wrapper.text()).toContain('暂无分类')
   })
+
+  it('新建一级分类弹窗展示层级指引和命名建议', async () => {
+    vi.mocked(categoryApi.listCategories).mockResolvedValue([])
+    const wrapper = mount(CategoryView, {
+      global: { plugins: [ElementPlus] },
+    })
+    wrappers.push(wrapper)
+    await flushPromises()
+
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('创建商品大类，作为二级分类的上级目录')
+    expect(wrapper.text()).toContain('分类信息')
+    expect(wrapper.text()).toContain('一级目录')
+    expect(wrapper.text()).toContain('创建后不可更改')
+    expect(wrapper.text()).toContain('分类层级')
+    expect(wrapper.text()).toContain('共 3 级')
+    expect(wrapper.text()).toContain('二级分类')
+    expect(wrapper.text()).toContain('产品')
+    expect(wrapper.text()).toContain('命名建议')
+    expect(wrapper.text()).toContain('同一层级下分类名称不可重复')
+    expect(wrapper.text()).toContain('保存后在分类列表中继续维护')
+  })
 })

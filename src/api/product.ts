@@ -74,3 +74,8 @@ export function archiveProduct(id: number): Promise<void> {
 export function restoreProduct(id: number): Promise<void> {
   return postProductAction(id, 'restore', '恢复产品失败')
 }
+
+export async function deleteProduct(id: number): Promise<void> {
+  const response = await request.delete<ProductApiResult<null>>(`/admin/products/${id}`)
+  requireSuccess(response.data, '硬删除产品失败')
+}
