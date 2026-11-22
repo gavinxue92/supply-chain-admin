@@ -532,11 +532,6 @@ onMounted(loadAccounts)
                 <span>运营编辑 · 当前选择</span>
                 <em v-if="createForm.role === 'EDITOR'">当前</em>
               </li>
-              <li :class="{ 'is-current': createForm.role === 'VIEWER' }">
-                <strong>VIEWER</strong>
-                <span>访客 · 只读权限</span>
-                <em v-if="createForm.role === 'VIEWER'">当前</em>
-              </li>
             </ul>
           </section>
         </aside>

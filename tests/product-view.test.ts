@@ -367,7 +367,9 @@ describe('产品管理页面', () => {
     vi.mocked(productApi.listProducts).mockResolvedValue([
       product({ id: 4, name: '小胖牌毛肚', status: 'DRAFT', specifications: [] }),
     ])
-    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+    // Element Plus 把返回值类型声明成 MessageBoxInputData & Action（属性与字符串求交，无法构造），
+    // 运行时确认结果是字符串 'confirm'，这里按运行期实际值断言。
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
 
     const wrapper = mount(ProductView, { global: { plugins: [ElementPlus] } })
     wrappers.push(wrapper)
