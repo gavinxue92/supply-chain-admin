@@ -350,6 +350,10 @@ async function runProductAction(product: ProductVO, action: ProductAction) {
   const confirmation = actionConfirmation(product, action)
   operationError.value = ''
   successMessage.value = ''
+  if (action === 'publish' && (product.specifications ?? []).length === 0) {
+    operationError.value = '该产品还没有规格，请先编辑产品并添加至少一个规格后再上架'
+    return
+  }
   if (!(await requestConfirmation(confirmation.message, confirmation.title))) return
 
   try {

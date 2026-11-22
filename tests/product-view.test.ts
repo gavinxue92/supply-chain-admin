@@ -341,7 +341,7 @@ describe('产品管理页面', () => {
         contactMode: 'INHERIT',
         contactServiceIds: [],
         sortOrder: 0,
-        specifications: [],
+        specifications: [{ id: 1, name: '500g', referencePrice: null, sortOrder: 0 }],
       },
     ])
     vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue('cancel')
@@ -361,6 +361,23 @@ describe('产品管理页面', () => {
     )
     expect(productApi.publishProduct).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('草稿')
+  })
+
+  it('没有规格的草稿点击上架时直接提示补充规格，不调用上架接口', async () => {
+    vi.mocked(productApi.listProducts).mockResolvedValue([
+      product({ id: 4, name: '小胖牌毛肚', status: 'DRAFT', specifications: [] }),
+    ])
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+
+    const wrapper = mount(ProductView, { global: { plugins: [ElementPlus] } })
+    wrappers.push(wrapper)
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === '上架')?.trigger('click')
+    await flushPromises()
+
+    expect(ElMessageBox.confirm).not.toHaveBeenCalled()
+    expect(productApi.publishProduct).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('请先编辑产品并添加至少一个规格后再上架')
   })
 
   it('归档和恢复均二次确认并以服务端返回状态刷新列表', async () => {
@@ -809,12 +826,12 @@ describe('产品管理页面', () => {
     wrappers.push(wrapper)
     await flushPromises()
 
-    expect(wrapper.get('.progress-summary').text()).toContain('0/5')
-    expect(wrapper.get('.progress-summary').text()).toContain('还有 5 项待补充')
+    expect(wrapper.get('.progress-summary').text()).toContain('0/6')
+    expect(wrapper.get('.progress-summary').text()).toContain('还有 6 项待补充')
 
     await wrapper.get('input[placeholder="请输入产品名称"]').setValue('进度产品')
     await flushPromises()
-    expect(wrapper.get('.progress-summary').text()).toContain('0/5')
+    expect(wrapper.get('.progress-summary').text()).toContain('0/6')
 
     await wrapper.findAll('.el-select__wrapper')[0].trigger('click')
     await flushPromises()
@@ -831,14 +848,20 @@ describe('产品管理页面', () => {
     secondOption?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
-    expect(wrapper.get('.progress-summary').text()).toContain('1/5')
+    expect(wrapper.get('.progress-summary').text()).toContain('1/6')
     expect(wrapper.findAll('.progress-list li.is-done')).toHaveLength(1)
 
     await wrapper.get('textarea[placeholder="每行输入一个关键词"]').setValue('冻品')
     await flushPromises()
-    expect(wrapper.get('.progress-summary').text()).toContain('2/5')
-    expect(wrapper.get('.progress-summary').text()).toContain('还有 3 项待补充')
+    expect(wrapper.get('.progress-summary').text()).toContain('2/6')
+    expect(wrapper.get('.progress-summary').text()).toContain('还有 4 项待补充')
     expect(wrapper.findAll('.progress-list li.is-done')).toHaveLength(2)
+
+    await wrapper.findAll('button').find((button) => button.text() === '添加规格')?.trigger('click')
+    await wrapper.get('input[placeholder="请输入规格名称"]').setValue('500g')
+    await flushPromises()
+    expect(wrapper.get('.progress-summary').text()).toContain('3/6')
+    expect(wrapper.findAll('.progress-list li.is-done')).toHaveLength(3)
   })
 
   it('上传图片只在对应的素材框内展示', async () => {

@@ -7,6 +7,8 @@ import AppLayout from '../views/AppLayout.vue'
 import CategoryView from '../views/CategoryView.vue'
 import ProductView from '../views/ProductView.vue'
 import ContactView from '../views/ContactView.vue'
+import HotKeywordView from '../views/HotKeywordView.vue'
+import ShopView from '../views/ShopView.vue'
 import AccountView from '../views/AccountView.vue'
 import PlaceholderView from '../views/PlaceholderView.vue'
 
@@ -25,6 +27,8 @@ export function createAppRouter(history: RouterHistory = createWebHistory()) {
           { path: 'products', name: 'products', component: ProductView, meta: { title: '产品管理' } },
           { path: 'categories', name: 'categories', component: CategoryView, meta: { title: '分类管理' } },
           { path: 'contact', name: 'contact', component: ContactView, meta: { title: '客服配置', roles: ['ADMIN'] } },
+          { path: 'hot-keywords', name: 'hot-keywords', component: HotKeywordView, meta: { title: '搜索热词', roles: ['ADMIN'] } },
+          { path: 'shop', name: 'shop', component: ShopView, meta: { title: '店铺信息', roles: ['ADMIN'] } },
           { path: 'accounts', name: 'accounts', component: AccountView, meta: { title: '账号管理', roles: ['ADMIN'] } },
         ],
       },

@@ -169,6 +169,11 @@ const progressItems = computed(() => {
       done: detailText.length > 0,
     },
     {
+      key: 'specs',
+      label: '规格',
+      done: form.specifications.some((specification) => specification.name.trim().length > 0),
+    },
+    {
       key: 'publish',
       label: '发布设置',
       done: keywordText.value.trim().length > 0,

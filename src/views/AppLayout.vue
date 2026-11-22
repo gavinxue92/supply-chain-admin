@@ -48,6 +48,8 @@ const menuItems = computed<MenuItem[]>(() => [
   ...(auth.role === 'ADMIN'
     ? ([
         { index: '/contact', label: '客服配置', icon: 'contact' },
+        { index: '/hot-keywords', label: '搜索热词', icon: 'contact' },
+        { index: '/shop', label: '店铺信息', icon: 'contact' },
         { index: '/accounts', label: '账号管理', icon: 'account' },
       ] as MenuItem[])
     : []),
