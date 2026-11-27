@@ -3,6 +3,7 @@ import axios from 'axios'
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as accountApi from '../api/account'
+import { useIsMobile } from '../composables/useIsMobile'
 import type {
   AccountApiResult,
   AdminAccountVO,
@@ -12,6 +13,7 @@ import type { UserRole } from '../types/auth'
 
 const accounts = ref<AdminAccountVO[]>([])
 const loading = ref(false)
+const isMobile = useIsMobile()
 const loadError = ref('')
 const operationError = ref('')
 const successMessage = ref('')
@@ -359,7 +361,41 @@ onMounted(loadAccounts)
       class="account-alert"
     />
 
-    <el-table v-loading="loading" :data="accounts" row-key="id">
+    <div v-if="isMobile" v-loading="loading" class="account-cards">
+      <el-empty v-if="accounts.length === 0" description="暂无后台账号" />
+      <article v-for="row in accounts" :key="row.id" class="account-mobile-card">
+        <div class="card-head">
+          <div class="card-title">
+            <strong>{{ row.username }}</strong>
+            <span class="card-sub">#{{ row.id }} · {{ row.nickname || '未设置昵称' }}</span>
+          </div>
+          <el-tag :type="row.role === 'ADMIN' ? 'warning' : 'info'">
+            {{ roleLabel(row.role) }}
+          </el-tag>
+        </div>
+        <div class="card-tags">
+          <el-tag :type="row.active ? 'success' : 'info'" size="small">
+            {{ row.active ? '已启用' : '已停用' }}
+          </el-tag>
+          <el-tag :type="row.mustChangePassword ? 'warning' : 'success'" size="small">
+            {{ row.mustChangePassword ? '需改密' : '密码正常' }}
+          </el-tag>
+        </div>
+        <div class="card-meta">创建于 {{ formatCreatedAt(row.createdAt) }}</div>
+        <div class="card-actions">
+          <el-button link type="primary" @click="openNicknameDialog(row)">编辑昵称</el-button>
+          <el-button link type="primary" @click="openResetDialog(row)">重置临时密码</el-button>
+          <el-button v-if="row.active" link type="danger" @click="deactivateAccount(row)">
+            停用
+          </el-button>
+          <el-button v-if="!row.active" link type="danger" @click="deleteAccount(row)">
+            硬删除
+          </el-button>
+        </div>
+      </article>
+    </div>
+
+    <el-table v-if="!isMobile" v-loading="loading" :data="accounts" row-key="id">
       <template #empty>
         <el-empty description="暂无后台账号" />
       </template>
@@ -894,6 +930,70 @@ onMounted(loadAccounts)
   padding-top: 8px;
 }
 
+/* ---------- 手机端卡片列表 ---------- */
+.account-cards {
+  display: grid;
+  gap: 10px;
+}
+
+.account-mobile-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.card-title {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+}
+
+.card-title strong {
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-sub {
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.card-meta {
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--app-border);
+}
+
 @media (max-width: 760px) {
   .account-create-grid {
     grid-template-columns: 1fr;
@@ -902,6 +1002,10 @@ onMounted(loadAccounts)
   .account-create-footer {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .account-create-dialog :deep(.el-dialog__body) {
+    max-height: calc(100svh - 150px);
   }
 }
 </style>

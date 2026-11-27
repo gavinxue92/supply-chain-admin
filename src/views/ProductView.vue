@@ -7,6 +7,7 @@ import * as categoryApi from '../api/category'
 import * as contactApi from '../api/contact'
 import * as productApi from '../api/product'
 import ProductForm from '../components/ProductForm.vue'
+import { useIsMobile } from '../composables/useIsMobile'
 import type { CategoryVO } from '../types/category'
 import type { CustomerServiceVO } from '../types/contact'
 import type {
@@ -19,6 +20,7 @@ import type {
 } from '../types/product'
 
 const auth = useAuthStore()
+const isMobile = useIsMobile()
 const products = ref<ProductVO[]>([])
 const categories = ref<CategoryVO[]>([])
 const customerServices = ref<CustomerServiceVO[]>([])
@@ -505,7 +507,131 @@ onMounted(() => {
       </el-select>
     </div>
 
-    <el-table v-loading="loading" :data="filteredProducts" row-key="id">
+    <div v-if="isMobile" v-loading="loading" class="product-cards">
+      <el-empty
+        v-if="filteredProducts.length === 0"
+        :description="hasFilters ? '没有符合条件的产品' : '暂无产品'"
+      />
+      <article v-for="row in filteredProducts" :key="row.id" class="product-card">
+        <div class="card-head">
+          <el-image
+            v-if="row.mainImageMediaId"
+            class="card-thumb"
+            :src="`/api/v1/media/${row.mainImageMediaId}`"
+            :preview-src-list="[`/api/v1/media/${row.mainImageMediaId}`]"
+            fit="cover"
+            preview-teleported
+            :alt="`${row.name || '产品'}主图`"
+          />
+          <span v-else class="card-thumb is-empty">无主图</span>
+          <div class="card-title">
+            <strong>{{ row.name || '未命名产品' }}</strong>
+            <span class="card-sub">#{{ row.id }} · {{ categoryPath(row.categoryId) }}</span>
+          </div>
+          <el-tag class="card-status">{{ statusLabel(row.status) }}</el-tag>
+        </div>
+
+        <div class="card-contact">
+          <span class="card-label">客服</span>
+          <template v-if="contactEditingId === row.id">
+            <el-select
+              v-model="contactSelection"
+              filterable
+              clearable
+              placeholder="选择其他客服替换当前客服"
+              class="product-contact-select"
+              popper-class="product-contact-popper"
+            >
+              <el-option
+                v-for="service in selectableContactServices"
+                :key="service.id"
+                :label="`${service.displayName}（${service.active ? '已启用' : '已停用'}）`"
+                :value="service.id"
+                :disabled="!service.active"
+              />
+            </el-select>
+            <div class="product-contact-actions">
+              <el-button
+                link
+                type="primary"
+                :loading="contactSavingId === row.id"
+                @click="saveProductContacts(row)"
+              >
+                保存
+              </el-button>
+              <el-button link :disabled="contactSavingId === row.id" @click="closeContactEditor">
+                取消
+              </el-button>
+            </div>
+            <div v-if="contactEditError" class="product-contact-error">
+              {{ contactEditError }}
+            </div>
+          </template>
+          <el-button
+            v-else
+            link
+            type="primary"
+            :disabled="row.status === 'ARCHIVED'"
+            @click="openContactEditor(row)"
+          >
+            {{ productContactLabel(row) }}
+          </el-button>
+        </div>
+
+        <div class="card-actions">
+          <el-button
+            v-if="row.status !== 'ARCHIVED'"
+            link
+            type="primary"
+            @click="openEditDialog(row)"
+          >
+            编辑
+          </el-button>
+          <el-button
+            v-if="row.status === 'DRAFT' || row.status === 'UNPUBLISHED'"
+            link
+            type="primary"
+            @click="runProductAction(row, 'publish')"
+          >
+            上架
+          </el-button>
+          <el-button
+            v-if="row.status === 'PUBLISHED'"
+            link
+            type="primary"
+            @click="runProductAction(row, 'unpublish')"
+          >
+            下架
+          </el-button>
+          <el-button
+            v-if="auth.role === 'ADMIN' && row.status !== 'ARCHIVED'"
+            link
+            type="danger"
+            @click="runProductAction(row, 'archive')"
+          >
+            归档
+          </el-button>
+          <el-button
+            v-if="auth.role === 'ADMIN' && row.status === 'ARCHIVED'"
+            link
+            type="primary"
+            @click="runProductAction(row, 'restore')"
+          >
+            恢复
+          </el-button>
+          <el-button
+            v-if="auth.role === 'ADMIN' && row.status === 'ARCHIVED'"
+            link
+            type="danger"
+            @click="hardDeleteProduct(row)"
+          >
+            硬删除
+          </el-button>
+        </div>
+      </article>
+    </div>
+
+    <el-table v-if="!isMobile" v-loading="loading" :data="filteredProducts" row-key="id">
       <template #empty>
         <el-empty :description="hasFilters ? '没有符合条件的产品' : '暂无产品'" />
       </template>
@@ -643,6 +769,7 @@ onMounted(() => {
     destroy-on-close
     class="product-dialog"
     align-center
+    :show-close="false"
   >
     <template #header>
       <div class="dialog-brand-header">
@@ -789,4 +916,126 @@ onMounted(() => {
   font-size: 12px;
   line-height: 1.4;
 }
+
+/* ---------- 手机端卡片列表 ----------
+ * el-table 在 390px 宽度下必然横向滚动（操作列 min-width 400），
+ * 所以窄屏整块换成卡片，数据源与操作函数跟表格完全一致。
+ */
+.product-cards {
+  display: grid;
+  gap: 12px;
+}
+
+.product-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-thumb {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  border-radius: 8px;
+}
+
+.card-thumb.is-empty {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  background: var(--app-surface-soft);
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.card-title {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.card-title strong {
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-sub {
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-status {
+  flex: none;
+}
+
+.card-contact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--app-border);
+}
+
+.card-label {
+  flex: none;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.card-contact .product-contact-select {
+  flex: 1;
+  min-width: 160px;
+  width: auto;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--app-border);
+}
+
+/* 移动端覆盖必须放在所有基础规则之后，否则同优先级下会被上面的定宽规则盖回去 */
+@media (max-width: 720px) {
+  /* 手机地址栏会伸缩，vh 不可靠，改用 svh */
+  .product-dialog :deep(.el-dialog__body) {
+    max-height: calc(100svh - 132px);
+  }
+
+  .dialog-brand-text small {
+    display: none;
+  }
+
+  .product-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .product-filter-search,
+  .product-filter-select {
+    max-width: none;
+    width: 100%;
+  }
+}
+
 </style>

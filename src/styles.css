@@ -59,3 +59,123 @@ body {
   background: var(--app-bg);
   color: var(--app-text);
 }
+
+/* ============================================================
+ * 移动端适配（<= 899px 触屏为主，<= 720px 手机为主）
+ *
+ * 说明：这里只放"全局兜底"规则——Element Plus 浮层宽度、iOS 输入框缩放、
+ * 触摸目标尺寸这类改不动源码的东西。具体页面的卡片列表写在各自组件的
+ * scoped style 里，避免这里堆成一个巨型文件。
+ * ============================================================ */
+
+:root {
+  /* 刘海屏底部安全区，粘性操作条和抽屉都要留出这段 */
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --app-safe-top: env(safe-area-inset-top, 0px);
+}
+
+@supports (height: 100svh) {
+  body {
+    /* svh 跟随地址栏收缩，比 vh 更接近手机上的"可视高度" */
+    min-height: 100svh;
+  }
+}
+
+@media (max-width: 899px) {
+  /*
+   * iOS Safari 在输入框字体小于 16px 时，聚焦会自动放大页面，
+   * 用户必须手动缩放回去。Element Plus 默认 14px，这里统一抬到 16px。
+   */
+  .el-input__inner,
+  .el-textarea__inner,
+  .el-select__input,
+  input,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* 桌面尺寸的浮层在手机上会溢出屏幕 */
+  .el-message-box {
+    max-width: calc(100vw - 32px);
+  }
+
+  .el-message,
+  .el-notification {
+    max-width: calc(100vw - 24px);
+  }
+
+  .el-drawer {
+    max-width: 88vw;
+  }
+
+  /* 下拉选项在触屏上需要更高行高才好点 */
+  .el-select-dropdown__item {
+    height: 44px;
+    line-height: 44px;
+  }
+}
+
+@media (max-width: 720px) {
+  /*
+   * 所有对话框统一铺满屏宽减 24px。
+   * 组件里写死的 width="520px" 之类会被这条覆盖，不用逐个改模板。
+   */
+  .el-dialog {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px);
+    margin: 12px auto !important;
+  }
+
+  .el-dialog__header {
+    padding: 14px 14px 8px;
+  }
+
+  .el-dialog__body {
+    padding: 12px 14px;
+  }
+
+  .el-dialog__footer {
+    padding: 8px 14px 14px;
+  }
+
+  .el-message-box {
+    width: calc(100vw - 32px) !important;
+    max-width: calc(100vw - 32px);
+  }
+
+  /*
+   * 表格里的"编辑 / 上架 / 删除"都是 link 按钮，桌面高度只有 24px 左右，
+   * 手指按不准。手机上把点击区抬到 40px（WCAG 建议的最小触摸目标）。
+   */
+  .el-button.is-link {
+    min-height: 40px;
+    padding: 0 8px;
+  }
+
+  .el-button.is-link + .el-button.is-link {
+    margin-left: 0;
+  }
+
+  .el-pagination {
+    justify-content: center;
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+}
+
+/* 移动端粘性底部操作条：表单、卡片抽屉共用 */
+.mobile-sticky-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  gap: 10px;
+  padding: 10px 0 calc(10px + var(--app-safe-bottom));
+  background: var(--app-surface);
+  border-top: 1px solid var(--app-border);
+}
+
+.mobile-sticky-actions > * {
+  flex: 1;
+}
+

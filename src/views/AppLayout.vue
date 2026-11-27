@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
+import { useIsMobile } from '../composables/useIsMobile'
 import type { AccountApiResult } from '../types/account'
 
 type MenuIcon = 'product' | 'category' | 'contact' | 'account'
@@ -28,6 +29,32 @@ function readDarkPreference(): boolean {
 
 const darkMode = ref(readDarkPreference())
 const collapsed = ref(false)
+
+const isMobile = useIsMobile()
+/** 手机上侧边栏是浮层抽屉，这个开关只在 isMobile 时生效 */
+const drawerOpen = ref(false)
+
+// 抽屉打开时锁住页面滚动，否则手指滑的是背后的列表
+watch(drawerOpen, (open) => {
+  if (typeof document === 'undefined') return
+  document.body.style.overflow = open && isMobile.value ? 'hidden' : ''
+})
+
+// 手机上点导航跳转后必须收起抽屉，否则会盖住刚打开的页面
+watch(
+  () => route.path,
+  () => {
+    drawerOpen.value = false
+  },
+)
+
+// 切到桌面宽度时把抽屉状态复位，避免溢出到桌面布局
+watch(isMobile, (mobile) => {
+  if (!mobile) {
+    drawerOpen.value = false
+    document.body.style.overflow = ''
+  }
+})
 
 watch(
   darkMode,
@@ -81,11 +108,28 @@ function onDocumentClick(event: MouseEvent) {
   }
 }
 
-onMounted(() => document.addEventListener('click', onDocumentClick))
-onUnmounted(() => document.removeEventListener('click', onDocumentClick))
+function onKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
+  if (drawerOpen.value) drawerOpen.value = false
+  if (userMenuOpen.value) userMenuOpen.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+  document.addEventListener('keydown', onKeydown)
+})
+onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick)
+  document.removeEventListener('keydown', onKeydown)
+  document.body.style.overflow = ''
+})
 
 function toggleUserMenu() {
   userMenuOpen.value = !userMenuOpen.value
+}
+
+function toggleDrawer() {
+  drawerOpen.value = !drawerOpen.value
 }
 
 const nicknameDialogVisible = ref(false)
@@ -94,6 +138,7 @@ const nicknameError = ref('')
 const nicknameForm = reactive({ nickname: '' })
 
 function navigate(index: string) {
+  drawerOpen.value = false
   if (route.path !== index) void router.push(index)
 }
 
@@ -216,9 +261,21 @@ async function logout() {
     </svg>
 
     <header class="app-header">
-      <div class="header-brand" :class="{ 'is-collapsed': collapsed }">
+      <button
+        v-if="isMobile"
+        type="button"
+        class="drawer-toggle"
+        :aria-expanded="drawerOpen"
+        :aria-label="drawerOpen ? '关闭导航菜单' : '打开导航菜单'"
+        @click.stop="toggleDrawer"
+      >
+        <svg class="app-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16" />
+        </svg>
+      </button>
+      <div class="header-brand" :class="{ 'is-collapsed': collapsed && !isMobile }">
         <span class="brand-mark"><svg class="app-icon"><use href="#icon-product" /></svg></span>
-        <span v-if="!collapsed" class="brand-text">供应链管理</span>
+        <span v-if="!collapsed || isMobile" class="brand-text">供应链管理</span>
       </div>
       <el-breadcrumb separator="/" class="header-breadcrumb">
         <el-breadcrumb-item :to="{ name: 'home' }">首页</el-breadcrumb-item>
@@ -265,7 +322,20 @@ async function logout() {
     </header>
 
     <div class="app-body">
-      <aside class="app-aside" :class="{ 'is-collapsed': collapsed }">
+      <div
+        v-if="isMobile && drawerOpen"
+        class="aside-scrim"
+        aria-hidden="true"
+        @click="drawerOpen = false"
+      />
+      <aside
+        class="app-aside"
+        :class="{
+          'is-collapsed': collapsed && !isMobile,
+          'is-drawer': isMobile,
+          'is-open': isMobile && drawerOpen,
+        }"
+      >
         <nav class="app-nav" aria-label="主导航">
           <button
             v-for="item in menuItems"
@@ -273,11 +343,11 @@ async function logout() {
             type="button"
             class="nav-item"
             :class="{ 'is-active': route.path === item.index }"
-            :title="collapsed ? item.label : undefined"
+            :title="collapsed && !isMobile ? item.label : undefined"
             @click="navigate(item.index)"
           >
             <svg class="app-icon"><use :href="`#icon-${item.icon}`" /></svg>
-            <span v-if="!collapsed" class="nav-label">{{ item.label }}</span>
+            <span v-if="!collapsed || isMobile" class="nav-label">{{ item.label }}</span>
           </button>
         </nav>
 
@@ -291,9 +361,12 @@ async function logout() {
             <svg class="app-icon">
               <use :href="darkMode ? '#icon-sun' : '#icon-moon'" />
             </svg>
-            <span v-if="!collapsed" class="nav-label">{{ darkMode ? '浅色模式' : '深色模式' }}</span>
+            <span v-if="!collapsed || isMobile" class="nav-label">
+              {{ darkMode ? '浅色模式' : '深色模式' }}
+            </span>
           </button>
           <button
+            v-if="!isMobile"
             type="button"
             class="nav-item"
             :title="collapsed ? '展开侧边栏' : '收起侧边栏'"
@@ -644,6 +717,112 @@ async function logout() {
   overflow: auto;
 }
 
+/* 手机上的汉堡按钮，只在 isMobile 时渲染 */
+.drawer-toggle {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  margin-left: 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--app-text);
+  cursor: pointer;
+}
+
+.drawer-toggle:active {
+  background: var(--app-surface-soft);
+}
+
+.drawer-toggle .app-icon {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2;
+}
+
+/* 抽屉打开时压住正文的半透明遮罩，点一下关闭 */
+.aside-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(11, 25, 28, 0.45);
+}
+
+/*
+ * 手机上的侧边栏 = 固定定位的抽屉。
+ * 桌面那套 208px 常驻 + 收起 64px 的逻辑在手机上没意义，直接换成浮层。
+ */
+.app-aside.is-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 50;
+  width: min(78vw, 280px);
+  padding-top: var(--app-safe-top, 0px);
+  padding-bottom: var(--app-safe-bottom, 0px);
+  transform: translateX(-100%);
+  transition: transform 0.22s ease;
+  box-shadow: 0 18px 44px rgba(16, 45, 60, 0.24);
+}
+
+.app-aside.is-drawer.is-open {
+  transform: translateX(0);
+}
+
+.app-aside.is-drawer .nav-item {
+  height: 46px;
+}
+
+@supports (height: 100svh) {
+  .app-shell {
+    min-height: 100svh;
+  }
+}
+
+@media (max-width: 899px) {
+  .app-header {
+    height: 56px;
+    padding-right: 10px;
+  }
+
+  .header-brand {
+    width: auto;
+    flex: 1;
+    min-width: 0;
+    padding: 0 4px;
+    border-right: 0;
+  }
+
+  .header-brand.is-collapsed {
+    width: auto;
+    justify-content: flex-start;
+  }
+
+  .brand-text {
+    font-size: 14px;
+  }
+
+  /* 手机上顶栏空间不够，面包屑反而占位，隐藏掉 */
+  .header-breadcrumb {
+    display: none;
+  }
+
+  .app-main {
+    padding: 12px;
+  }
+
+  .user-dropdown {
+    width: min(280px, calc(100vw - 24px));
+  }
+
+  .dropdown-item {
+    padding: 14px 12px;
+  }
+}
+
 @media (max-width: 720px) {
   .user-trigger {
     min-width: 0;
@@ -654,7 +833,7 @@ async function logout() {
   }
 
   .app-main {
-    padding: 16px;
+    padding: 12px;
   }
 }
 </style>

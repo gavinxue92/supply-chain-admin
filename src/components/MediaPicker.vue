@@ -137,6 +137,7 @@ async function handleFileSelection(event: Event) {
           <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
         </svg>
         <span>上传{{ label }}</span>
+        <small class="media-tip">可直接拍照或从相册选择</small>
       </template>
       <div v-else class="media-preview-grid">
         <div v-for="media in modelValue" :key="media.id" class="media-preview-item">
@@ -309,5 +310,61 @@ async function handleFileSelection(event: Event) {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* 桌面端不显示，手机端才提示"可拍照" */
+.media-tip {
+  display: none;
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+@media (max-width: 899px) {
+  .media-upload-box {
+    min-height: 112px;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* 已有图片时是横向排布的缩略图区，不要再竖排 */
+  .media-upload-box.has-media {
+    flex-direction: row;
+    min-height: 0;
+    padding: 10px;
+  }
+
+  .media-tip {
+    display: block;
+  }
+
+  .media-preview {
+    width: 88px;
+    height: 88px;
+  }
+
+  .media-preview-item {
+    gap: 6px;
+  }
+
+  .media-preview-actions {
+    gap: 10px;
+    font-size: 12px;
+  }
+
+  /* 桌面 11px 的小链接在手机上按不准，抬到 40px 触摸高度 */
+  .media-preview-actions .el-button {
+    min-height: 40px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  .upload-errors li {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .upload-errors .el-button {
+    min-height: 40px;
+  }
 }
 </style>

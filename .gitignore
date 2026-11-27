@@ -2,3 +2,5 @@ node_modules/
 dist/
 .env.local
 *.log
+# 移动端布局自检截图（本地临时产物）
+.mobile-check/

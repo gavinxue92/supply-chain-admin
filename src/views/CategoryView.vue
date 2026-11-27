@@ -3,7 +3,10 @@ import axios from 'axios'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import * as categoryApi from '../api/category'
+import { useIsMobile } from '../composables/useIsMobile'
 import type { ApiResult, CategoryRequest, CategoryVO } from '../types/category'
+
+const isMobile = useIsMobile()
 
 const categories = ref<CategoryVO[]>([])
 const loading = ref(false)
@@ -321,7 +324,51 @@ onMounted(loadCategories)
       class="category-alert"
     />
 
-    <el-table v-loading="loading" :data="visibleCategories" row-key="id">
+    <div v-if="isMobile" v-loading="loading" class="category-cards">
+      <el-empty v-if="visibleCategories.length === 0" description="暂无分类" />
+      <article
+        v-for="row in visibleCategories"
+        :key="row.id"
+        class="category-card"
+        :class="{ 'is-child': !isRootCategory(row) }"
+      >
+        <div class="card-head">
+          <el-button
+            v-if="isRootCategory(row) && hasChildren(row)"
+            link
+            type="primary"
+            :aria-expanded="isExpanded(row)"
+            @click="toggleExpanded(row)"
+          >
+            <span class="category-tree-indicator">{{ isExpanded(row) ? '−' : '+' }}</span>
+            {{ row.name }}
+          </el-button>
+          <span v-else class="card-name">{{ row.name }}</span>
+          <el-tag :type="row.active ? 'success' : 'info'">{{ row.active ? '已启用' : '已停用' }}</el-tag>
+        </div>
+        <div class="card-meta">
+          <span>{{ isRootCategory(row) ? '一级分类' : '二级分类' }}</span>
+          <span>排序 {{ row.sortOrder }}</span>
+        </div>
+        <div class="card-actions">
+          <el-button
+            v-if="isRootCategory(row)"
+            link
+            type="primary"
+            @click="openCreateSubcategory(row)"
+          >
+            新增二级分类
+          </el-button>
+          <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
+          <el-button link type="primary" @click="toggleCategoryStatus(row)">
+            {{ row.active ? '停用' : '启用' }}
+          </el-button>
+          <el-button link type="danger" @click="removeCategory(row)">删除</el-button>
+        </div>
+      </article>
+    </div>
+
+    <el-table v-if="!isMobile" v-loading="loading" :data="visibleCategories" row-key="id">
       <template #empty>
         <el-empty description="暂无分类" />
       </template>
@@ -834,6 +881,56 @@ onMounted(loadCategories)
   padding-top: 8px;
 }
 
+/* ---------- 手机端卡片列表 ---------- */
+.category-cards {
+  display: grid;
+  gap: 10px;
+}
+
+.category-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.category-card.is-child {
+  margin-left: 16px;
+  border-left: 3px solid var(--app-brand-soft);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.card-name {
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-meta {
+  display: flex;
+  gap: 12px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--app-border);
+}
+
 @media (max-width: 720px) {
   .category-grid {
     grid-template-columns: 1fr;
@@ -842,6 +939,11 @@ onMounted(loadCategories)
   .category-footer {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  /* svh 跟随手机地址栏收缩，避免对话框底部被遮住 */
+  .category-dialog :deep(.el-dialog__body) {
+    max-height: calc(100svh - 150px);
   }
 }
 </style>

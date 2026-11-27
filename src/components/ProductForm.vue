@@ -556,6 +556,9 @@ function submit() {
 .draft-main,
 .draft-side {
   display: grid;
+  /* 显式 minmax(0,1fr)：默认的 auto 列会被子元素的 max-content 撑开，
+     手机上表现为整块内容横向溢出、右侧被裁掉 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   min-width: 0;
 }
@@ -771,20 +774,65 @@ function submit() {
 
 @media (max-width: 960px) {
   .draft-grid {
-    grid-template-columns: 1fr;
+    /* 同样必须是 minmax(0,1fr)，否则 auto 最小尺寸会让内层 grid 溢出 */
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
-@media (max-width: 720px) {
+/*
+ * 手机端：表单会变成一条很长的页面，保存按钮如果留在最底部，
+ * 用户录完图片和详情后要滑很久才能提交。这里把操作区钉在对话框底部。
+ */
+@media (max-width: 899px) {
+  .draft-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 6;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px 0 calc(10px + var(--app-safe-bottom, 0px));
+    background: var(--app-surface);
+    border-top: 1px solid var(--app-border);
+  }
+
+  .draft-note {
+    font-size: 11px;
+  }
+
+  .form-actions {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 10px;
+  }
+
+  .form-actions .el-button {
+    width: 100%;
+    height: 44px;
+    margin-left: 0;
+  }
+
   .field-row,
-  .image-grid,
   .specification-row {
     grid-template-columns: 1fr;
   }
 
-  .draft-footer {
-    flex-direction: column;
-    align-items: stretch;
+  /* 三个图片选择器按可用宽度自动折行，手机上通常两列，比硬性单列省篇幅 */
+  .image-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .form-card {
+    padding: 14px;
+  }
+
+  .sort-stepper .el-input-number {
+    flex: 1;
+    width: 100%;
+  }
+
+  .specification-row .el-button {
+    justify-self: end;
   }
 }
 </style>

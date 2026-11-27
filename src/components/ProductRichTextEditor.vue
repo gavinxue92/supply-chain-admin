@@ -155,4 +155,36 @@ defineExpose({ insertMedia })
 .rich-text-content:focus {
   border-color: #409eff;
 }
+
+/*
+ * 手机上 9 个格式按钮换行会占掉半屏，改成单行横向滚动；
+ * 按钮高度抬到 40px 才按得准。
+ */
+@media (max-width: 899px) {
+  .editor-toolbar {
+    flex-wrap: nowrap;
+    gap: 4px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .editor-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .editor-toolbar .el-button {
+    flex: none;
+    min-height: 40px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  .rich-text-content {
+    min-height: 220px;
+    /* 16px 以下 iOS Safari 聚焦时会自动放大整个页面 */
+    font-size: 16px;
+  }
+}
 </style>

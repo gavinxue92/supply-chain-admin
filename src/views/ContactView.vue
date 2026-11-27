@@ -4,6 +4,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import * as contactApi from '../api/contact'
 import MediaPicker from '../components/MediaPicker.vue'
+import { useIsMobile } from '../composables/useIsMobile'
 import type {
   ContactApiResult,
   CustomerServiceRequest,
@@ -13,6 +14,7 @@ import type {
 import type { ConfirmedMediaVO } from '../types/media'
 
 const services = ref<CustomerServiceVO[]>([])
+const isMobile = useIsMobile()
 const globalContact = ref<GlobalContactVO | null>(null)
 const loading = ref(false)
 const globalSaving = ref(false)
@@ -329,7 +331,48 @@ onMounted(loadAll)
         class="contact-alert"
       />
 
-      <el-table :data="services" row-key="id">
+      <div v-if="isMobile" v-loading="loading" class="contact-cards">
+        <el-empty v-if="services.length === 0" description="暂无客服联系人" />
+        <article v-for="row in services" :key="row.id" class="contact-mobile-card">
+          <div class="card-head">
+            <el-image
+              v-if="qrUrl(row)"
+              :src="qrUrl(row)"
+              fit="cover"
+              class="card-qr"
+              :preview-src-list="[qrUrl(row)]"
+              preview-teleported
+            />
+            <span v-else class="card-qr is-empty">未上传</span>
+            <div class="card-title">
+              <strong>{{ row.displayName }}</strong>
+              <span class="card-sub">#{{ row.id }}</span>
+            </div>
+            <el-tag :type="row.active ? 'success' : 'info'">
+              {{ row.active ? '已启用' : '已停用' }}
+            </el-tag>
+          </div>
+          <dl class="card-fields">
+            <div>
+              <dt>微信号</dt>
+              <dd>{{ row.wechatId || '未填写' }}</dd>
+            </div>
+            <div>
+              <dt>手机号</dt>
+              <dd>{{ row.phone || '未填写' }}</dd>
+            </div>
+          </dl>
+          <div class="card-actions">
+            <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
+            <el-button link type="primary" @click="toggleActive(row)">
+              {{ row.active ? '停用' : '启用' }}
+            </el-button>
+            <el-button link type="danger" @click="deleteService(row)">硬删除</el-button>
+          </div>
+        </article>
+      </div>
+
+      <el-table v-if="!isMobile" :data="services" row-key="id">
         <template #empty>
           <el-empty description="暂无客服联系人" />
         </template>
@@ -396,7 +439,12 @@ onMounted(loadAll)
       </el-descriptions>
       <el-empty v-else :description="loading ? '加载中' : '尚未配置全局客服'" />
 
-      <el-form label-width="120px" class="contact-form" @submit.prevent="saveGlobal">
+      <el-form
+        label-width="120px"
+        :label-position="isMobile ? 'top' : 'right'"
+        class="contact-form"
+        @submit.prevent="saveGlobal"
+      >
         <el-form-item label="全局客服联系人">
           <el-select
             v-model="globalServiceIds"
@@ -843,6 +891,96 @@ onMounted(loadAll)
   padding-top: 8px;
 }
 
+/* ---------- 手机端卡片列表 ---------- */
+.contact-cards {
+  display: grid;
+  gap: 10px;
+}
+
+.contact-mobile-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-qr {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border-radius: 8px;
+}
+
+.card-qr.is-empty {
+  display: grid;
+  place-items: center;
+  background: var(--app-surface-soft);
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.card-title {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+}
+
+.card-title strong {
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-sub {
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.card-fields {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.card-fields div {
+  display: flex;
+  gap: 8px;
+}
+
+.card-fields dt {
+  flex: none;
+  width: 52px;
+  color: var(--app-text-muted);
+}
+
+.card-fields dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--app-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--app-border);
+}
+
 @media (max-width: 760px) {
   .contact-grid {
     grid-template-columns: 1fr;
@@ -853,6 +991,29 @@ onMounted(loadAll)
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .contact-dialog :deep(.el-dialog__body) {
+    max-height: calc(100svh - 150px);
+  }
+
+  /* 标题 + 两个按钮挤一行会把标题折成三行，手机上让操作按钮独占一行 */
+  .contact-header {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .contact-header > span {
+    flex: 1 1 100%;
+  }
+
+  .contact-header-actions {
+    width: 100%;
+  }
+
+  .contact-header-actions .el-button {
+    flex: 1;
+    margin-left: 0;
   }
 }
 </style>
