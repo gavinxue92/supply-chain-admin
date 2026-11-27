@@ -865,12 +865,6 @@ onMounted(() => {
   color: var(--app-text);
 }
 
-.product-dialog :deep(.el-dialog__body) {
-  max-height: calc(100vh - 170px);
-  overflow: auto;
-  padding-top: 8px;
-}
-
 .product-alert {
   margin-bottom: 16px;
 }
@@ -1017,11 +1011,6 @@ onMounted(() => {
 
 /* 移动端覆盖必须放在所有基础规则之后，否则同优先级下会被上面的定宽规则盖回去 */
 @media (max-width: 720px) {
-  /* 手机地址栏会伸缩，vh 不可靠，改用 svh */
-  .product-dialog :deep(.el-dialog__body) {
-    max-height: calc(100svh - 132px);
-  }
-
   .dialog-brand-text small {
     display: none;
   }
@@ -1038,4 +1027,23 @@ onMounted(() => {
   }
 }
 
+</style>
+
+<style>
+/*
+ * el-dialog 由 Element Plus 渲染并 teleport 到 body，元素上不带本组件的 data-v 标记，
+ * scoped 里的 :deep(.el-dialog__body) 匹配不到，正文滚动约束必须写成全局样式。
+ * 高度用 svh：手机地址栏伸缩时 vh 会跳变。
+ */
+.product-dialog .el-dialog__body {
+  max-height: calc(100vh - 170px);
+  overflow: auto;
+  padding-top: 8px;
+}
+
+@media (max-width: 720px) {
+  .product-dialog .el-dialog__body {
+    max-height: calc(100svh - 132px);
+  }
+}
 </style>

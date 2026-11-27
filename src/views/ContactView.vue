@@ -818,10 +818,6 @@ onMounted(loadAll)
   line-height: 1.6;
 }
 
-.contact-dialog :deep(.media-picker-heading) {
-  display: none;
-}
-
 .requirement-card {
   background: linear-gradient(180deg, var(--app-brand-soft), var(--app-surface));
 }
@@ -883,12 +879,6 @@ onMounted(loadAll)
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.contact-dialog :deep(.el-dialog__body) {
-  max-height: calc(100vh - 180px);
-  overflow: auto;
-  padding-top: 8px;
 }
 
 /* ---------- 手机端卡片列表 ---------- */
@@ -993,10 +983,6 @@ onMounted(loadAll)
     align-items: stretch;
   }
 
-  .contact-dialog :deep(.el-dialog__body) {
-    max-height: calc(100svh - 150px);
-  }
-
   /* 标题 + 两个按钮挤一行会把标题折成三行，手机上让操作按钮独占一行 */
   .contact-header {
     flex-wrap: wrap;
@@ -1014,6 +1000,29 @@ onMounted(loadAll)
   .contact-header-actions .el-button {
     flex: 1;
     margin-left: 0;
+  }
+}
+</style>
+
+<style>
+/*
+ * el-dialog 与 MediaPicker 内部节点都不带本组件的 data-v 标记，
+ * scoped :deep 选择器匹配不到，这里统一用全局规则。
+ */
+.contact-dialog .el-dialog__body {
+  max-height: calc(100vh - 180px);
+  overflow: auto;
+  padding-top: 8px;
+}
+
+/* 客服弹窗里已经有「客服二维码」标签，图片选择器自带的标题重复 */
+.contact-dialog .media-picker-heading {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .contact-dialog .el-dialog__body {
+    max-height: calc(100svh - 150px);
   }
 }
 </style>

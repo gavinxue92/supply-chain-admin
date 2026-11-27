@@ -924,12 +924,6 @@ onMounted(loadAccounts)
   gap: 8px;
 }
 
-.account-create-dialog :deep(.el-dialog__body) {
-  max-height: calc(100vh - 180px);
-  overflow: auto;
-  padding-top: 8px;
-}
-
 /* ---------- 手机端卡片列表 ---------- */
 .account-cards {
   display: grid;
@@ -1003,11 +997,20 @@ onMounted(loadAccounts)
     flex-direction: column;
     align-items: stretch;
   }
+}
+</style>
 
-  .account-create-dialog :deep(.el-dialog__body) {
+<style>
+/* el-dialog 被 teleport 到 body，scoped :deep 匹配不到，正文滚动约束只能全局写 */
+.account-create-dialog .el-dialog__body {
+  max-height: calc(100vh - 180px);
+  overflow: auto;
+  padding-top: 8px;
+}
+
+@media (max-width: 760px) {
+  .account-create-dialog .el-dialog__body {
     max-height: calc(100svh - 150px);
   }
 }
 </style>
-
-

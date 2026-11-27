@@ -875,12 +875,6 @@ onMounted(loadCategories)
   gap: 8px;
 }
 
-.category-dialog :deep(.el-dialog__body) {
-  max-height: calc(100vh - 180px);
-  overflow: auto;
-  padding-top: 8px;
-}
-
 /* ---------- 手机端卡片列表 ---------- */
 .category-cards {
   display: grid;
@@ -941,8 +935,20 @@ onMounted(loadCategories)
     align-items: stretch;
   }
 
+}
+</style>
+
+<style>
+/* el-dialog 被 teleport 到 body，scoped :deep 匹配不到，正文滚动约束只能全局写 */
+.category-dialog .el-dialog__body {
+  max-height: calc(100vh - 180px);
+  overflow: auto;
+  padding-top: 8px;
+}
+
+@media (max-width: 720px) {
   /* svh 跟随手机地址栏收缩，避免对话框底部被遮住 */
-  .category-dialog :deep(.el-dialog__body) {
+  .category-dialog .el-dialog__body {
     max-height: calc(100svh - 150px);
   }
 }
